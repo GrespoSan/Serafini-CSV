@@ -433,7 +433,7 @@ def render_equity(doc, ticker, now):
         target_day=now, groups=groups,
         strike_field="strike", gamma_field="net",
         source_name=ticker, price_name=ticker,
-        reference_close=close,
+        reference_close=close, snapshot_doc=doc,
     )
 
     try:
