@@ -95,13 +95,13 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
     market = st.selectbox("Mercato", list(MARKETS), key="mercato_selector")
     equity = market == "Azioni"
     symbol = MARKETS[market]
-    if market == "SP500":
+    if symbol in ("SPX", "NDX", "RUT", "DJX", "GLD", "USO"):
         st.markdown(
-            "### Fotografia opzioni Cboe · SPX · "
-            "[↗ Apri Cboe](https://www.cboe.com/data/quotes/SPX/options)"
+            f"### Fotografia opzioni Cboe · {symbol} · "
+            f"[↗ Apri Cboe](https://www.cboe.com/data/quotes/{symbol}/options)"
         )
     else:
-        st.subheader("Fotografia opzioni Cboe" + (f" · {symbol}" if symbol else " · Azioni"))
+        st.subheader("Fotografia opzioni Cboe · Azioni")
     upload = st.file_uploader("Carica il CSV della catena opzioni Cboe", type=["csv"], key=f"csv_{market}")
     if upload is not None:
         try:
