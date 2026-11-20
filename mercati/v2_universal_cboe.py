@@ -427,6 +427,16 @@ def render_equity(doc, ticker, now):
             st.caption(f"{len(group['rows'])} strike Call/Put · "
                        f"copertura {group['coverage']:.0%} · "
                        f"contratti completi {group['complete']}/{group['matched']}")
+    # Confronto su prezzi reali del titolo, senza usare un basis future.
+    from mercati.gamma_price_compare import render_optional_compare
+    render_optional_compare(
+        label=ticker, key="equity_" + ticker, yahoo_ticker=ticker,
+        target_day=now, groups=groups,
+        strike_field="strike", gamma_field="net",
+        source_name=ticker, price_name=ticker,
+        reference_close=close,
+    )
+
     out = io.StringIO()
     writer = csv.DictWriter(out, fieldnames=["scadenza", "strike", "call", "put", "net"])
     writer.writeheader()
