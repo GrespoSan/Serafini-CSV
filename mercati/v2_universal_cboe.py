@@ -6,7 +6,6 @@ This is not an independently established dealer-positioning or dollar-GEX model.
 """
 from __future__ import annotations
 
-import csv
 import gzip
 import io
 import json
@@ -437,15 +436,6 @@ def render_equity(doc, ticker, now):
         reference_close=close,
     )
 
-    out = io.StringIO()
-    writer = csv.DictWriter(out, fieldnames=["scadenza", "strike", "call", "put", "net"])
-    writer.writeheader()
-    for name, group in groups.items():
-        for row in group["rows"]:
-            writer.writerow({"scadenza": group["expiry"], **row})
-    st.download_button("Esporta NET GAMMA (.csv)", out.getvalue(),
-                       file_name=f"{ticker}_NET_GAMMA.csv", mime="text/csv",
-                       key="universal_csv_export", on_click="ignore")
     try:
         # Solo sezione Universale: nessun differenziale ETF/indice/future.
         # Non modificare _pine: il ramo future_mode serve a Russell/Dow.
