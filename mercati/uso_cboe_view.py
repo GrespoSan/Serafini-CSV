@@ -3,9 +3,7 @@ No Alpaca, scheduled polling, or conversion to NYMEX CL strikes.
 """
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
-import csv
 import hashlib
-import io
 
 import streamlit as st
 from mercati.gamma_chart_style import profile_chart, panel_heading, capture_display, spx_shared_gamma_bounds
@@ -17,16 +15,6 @@ from mercati.market_ui import render_empty_snapshot
 
 from mercati.uso_cboe import (USO_URL, download_uso, read_uso, expirations, next_weekly,
                       close_previous, current_price, profile, MIN_VALID_COVERAGE)
-
-
-def _to_csv(rows):
-    keys = ["strike", "net", "call", "put", "call_gamma", "put_gamma",
-            "call_oi", "put_oi", "call_volume", "put_volume"]
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=keys)
-    writer.writeheader()
-    writer.writerows(({key: row.get(key, "") for key in keys} for row in rows))
-    return output.getvalue().encode("utf-8-sig")
 
 
 def _plot(p, reference, common_x, shared_y, *, price_ratio=1.0,
@@ -245,10 +233,6 @@ def render_uso_cboe():
                             tick_levels=axes["tick_levels"])
                 st.plotly_chart(fig, use_container_width=True,
                                 key=f"uso_spx_gamma_{title}_{p['expiry']}")
-            st.download_button(f"Esporta CSV USO · {title}",
-                               data=_to_csv(p["rows"]),
-                               file_name=f"USO_CBOE_{p['expiry']}_{title}.csv",
-                               mime="text/csv", on_click="ignore")
     # Come Nasdaq: comparazione facoltativa Gamma/prezzo, solo 5m chiusi.
     # Quando non esiste un mapping M5 verificato si confronta l'ETF originale,
     # senza fabbricare livelli sul future CL.
