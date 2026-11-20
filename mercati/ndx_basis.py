@@ -10,38 +10,15 @@ from datetime import date, datetime, timedelta, time
 from zoneinfo import ZoneInfo
 import pandas as pd
 import requests
+from mercati.quarterly_contract import quarterly_contract
 from mercati.v2_massive_day_cache import fetch_json as fetch_massive_json
 
 NY=ZoneInfo('America/New_York')
 MASSIVE_FUTURES_API="https://api.massive.com/futures/v1/aggs"
 
 
-def _third_friday(year: int, month: int) -> date:
-    first=date(year,month,1)
-    return first+timedelta(days=((4-first.weekday())%7)+14)
-
-
 def nq_contract_for_date(trading_day: date) -> dict:
-    """TradingView symbol + Massive symbol, rolled by CME Monday convention.
-
-    The contract is selected by the date the levels will be used, not by
-    the prior cash-session date, so Monday roll calculations use the new
-    contract's Friday bars for comparison.
-    """
-    if not isinstance(trading_day,date):
-        raise ValueError("Giornata di analisi NQ non valida")
-    for yr in (trading_day.year,trading_day.year+1):
-        for month,month_code in ((3,"H"),(6,"M"),(9,"U"),(12,"Z")):
-            expiration=_third_friday(yr,month)
-            roll_day=expiration-timedelta(days=4)
-            if trading_day < roll_day:
-                return {
-                    "ticker":f"NQ{month_code}{yr%10}",
-                    "tv_symbol":f"NQ{month_code}{yr}",
-                    "roll_day":roll_day,
-                    "expiry":expiration,
-                }
-    raise ValueError("Impossibile identificare il contratto NQ trimestrale")
+    return quarterly_contract("NQ", trading_day)
 
 
 def _dated_nq_bars(contract: str, reference_day: date, api_key: str,
