@@ -246,6 +246,7 @@ def render_uso_cboe():
         strike_field="strike", gamma_field="net",
         source_name="USO", price_name="CL" if projected else "USO",
         price_scale=axes["price_ratio"], reference_close=reference,
+        snapshot_doc=data,
     )
     if not projected:
         st.caption("Confronto su USO originale: nessuna conversione "
