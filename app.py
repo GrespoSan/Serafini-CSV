@@ -146,13 +146,15 @@ with st.expander("ANALISI DEL CONTESTO — News · Volatilità · Trend Daily", 
                        daily_error=daily_error,
                        modeled_gex=None)
 
-    # Il Quadro Asia segue il Trend Daily ed è interno all'Analisi del contesto.
-    # È disponibile soltanto con una fotografia SPX; nessun dato sintetico.
+    # Il Quadro è sempre visibile dopo il Trend Daily. Senza uno snapshot SPX
+    # resta la lettura autonoma dell'Asia ES, senza inventare candidati C1/P1.
+    st.divider()
+    st.subheader("QUADRO OPERATIVO — ORE 09:00")
+    from asia_gamma import render_auto as render_asia_gamma
     if asia_panel is not None:
-        st.divider()
-        st.subheader("QUADRO OPERATIVO — ORE 09:00")
-        from asia_gamma import render_auto as render_asia_gamma
         render_asia_gamma(
             asia_panel['day'], asia_panel['c1_es'], asia_panel['p1_es'],
             level_context=asia_panel['level_context'],
         )
+    else:
+        render_asia_gamma(trend_day, None, None)
