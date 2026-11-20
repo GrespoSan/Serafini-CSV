@@ -59,7 +59,6 @@ st.markdown("""
 
 context_slot = st.empty()
 photo_day = None
-valid_snapshot = False
 upload = None
 store = None
 with st.expander("ANALISI NET GAMMA", expanded=True):
@@ -78,24 +77,20 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
                 warning = csv_coverage_warning(store.import_provenance)
                 if warning:
                     st.warning(warning)
-                valid_snapshot = True
                 week = store.week
                 snaps = store.list(f"{week}/snapshots/")
                 st.session_state[f"serafini_selected_snapshot_{week}"] = store.filename
                 render(store, week, snaps, [], show_heading=False, selector_external=True)
             else:
                 photo_day = render_market(upload, symbol, equity)
-                valid_snapshot = True
         except (InvalidLocalSnapshot, InvalidCboeCSV, ValueError) as exc:
             st.error(str(exc))
 
 with context_slot.container():
     with st.expander("ANALISI DEL CONTESTO — News · Volatilità · Trend Daily", expanded=False):
-        left, middle, right = st.columns([2.2, 1, 1], gap="medium", vertical_alignment="bottom")
         iso = (photo_day or datetime.now(ZoneInfo("Europe/Rome")).date()).isocalendar()
-        left.text_input("Settimana ISO (AAAA-WNN)", value=store.week if store else f"{iso.year}-W{iso.week:02d}", disabled=True)
-        middle.metric("Snapshot distinti", int(valid_snapshot))
-        right.metric("Registri", 0)
+        week_label = store.week if store else f"{iso.year}-W{iso.week:02d}"
+        st.markdown(f"**Settimana ISO (AAAA-WNN)** · {week_label}")
         context_details_slot = st.empty()
 with context_details_slot.container():
     # L'analisi viene visualizzata automaticamente; il download Massive ES
