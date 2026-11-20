@@ -556,6 +556,21 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                         + ' Fonte Yahoo ES=F: differenze possibili rispetto a TV ES1!.'
                     )
 
+    # Confronto facoltativo SPX/ES come su Nasdaq. Fetch prezzi solo a toggle ON.
+    # La proiezione y usa il differenziale gia' calcolato; Gamma invariato.
+    from mercati.gamma_price_compare import render_optional_compare
+    render_optional_compare(
+        label="S&P 500", key="spx", yahoo_ticker="ES=F",
+        target_day=day, groups=visual_profiles,
+        strike_field="strike_spx", gamma_field="net_gamma",
+        source_name="SPX", price_name="ES",
+        price_scale=1.0, price_shift=offset if offset is not None else 0.0,
+        reference_close=ref,
+        available=offset is not None,
+        unavailable_reason="Per confrontare le candele ES serve il "
+                           "differenziale ES-SPX verificato.",
+    )
+
     # Guida interpretativa: nessun effetto sui calcoli o sugli export.
     # Visibile sotto entrambi i grafici Net Gamma, chiusa per default.
     with st.expander('COME LEGGERE E USARE IL NET GAMMA SERAFINI', expanded=False):
