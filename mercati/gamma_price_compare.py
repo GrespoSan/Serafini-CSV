@@ -289,7 +289,7 @@ def render_optional_compare(*, label: str, key: str, yahoo_ticker: str,
             + (f"Fino al CSV Cboe {cutoff_utc.astimezone(ROME):%H:%M} Roma. "
                if cutoff_utc is not None else
                "Orario acquisizione CSV non certificato: confronto descrittivo. ")
-            "Prezzo e NET GAMMA condividono l'asse Y; "
+            + "Prezzo e NET GAMMA condividono l'asse Y; "
             "gli strike sono originali e il Gamma non viene ricalcolato. "
             "Il continuo Yahoo puo' differire dal TradingView dopo il rollover."
         )
