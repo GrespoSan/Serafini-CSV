@@ -18,7 +18,6 @@ from mercati.market_ui import render_empty_snapshot
 from mercati.ndx_engine import (unpack_snapshot, available_expirations, close_from_payload,
                         profile, weekly_target, DEFAULT_BAND_PCT)
 from mercati.ndx_basis import fetch_basis
-from mercati.nq_price_panel import load_nq_candles, chart_compare_nq
 
 ROME=ZoneInfo('Europe/Rome')
 
@@ -284,33 +283,20 @@ def render_selected_market(market_key):
                 st.plotly_chart(fg, use_container_width=True,
                                 key=f'ndx_spx_gamma_{kind}_{group["expiry"]}')
     
-    # Vista confronto facoltativa: la chiamata Yahoo 5m parte soltanto se attivata.
-    # I grafici NDX base e il motore Gamma rimangono invariati.
-    st.subheader('Confronto NET GAMMA / candele Nasdaq')
-    show_candle_compare=st.toggle('Mostra NET GAMMA a sinistra e candele NQ a destra',
-                                  value=False, key='ndx_show_candle_compare')
-    if show_candle_compare:
-        names=list(profiles)
-        mode=st.radio('Profilo da confrontare con NQ', names,
-                      horizontal=True, key='ndx_candle_profile')
-        if basis is None:
-            st.info('Inserisci il differenziale NQ–NDX per allineare la scala dei prezzi.')
-        else:
-            try:
-                with st.spinner('Lettura candele NQ=F Yahoo 5 minuti...'):
-                    candles=load_nq_candles(day)
-                fig=chart_compare_nq(profiles[mode],candles,basis,
-                                     band_low,band_high,previous_close_nq,mode)
-                st.plotly_chart(fig, use_container_width=True,
-                                key=f'ndx_price_gamma_{day}_{mode}')
-                st.caption('Scala prezzi condivisa NQ. Candele NQ=F Yahoo a 5 minuti '
-                           '(possono differire da NQ1! TradingView); nessuna candela simulata. '
-                           'L’intervallo visibile comprende anche le candele quando il '
-                           'mercato esce dalla fascia strike selezionata.')
-            except Exception as exc:
-                st.warning(f'Candele NQ a 5 minuti non disponibili: {str(exc)[:240]}. '
-                           'Il profilo NET GAMMA rimane accessibile sopra.')
-    
+    # Confronto Nasdaq con la stessa geometria e scala della versione SPX.
+    # Candele NQ a sinistra; NET GAMMA a destra, senza ricalcolare i profili.
+    from mercati.gamma_price_compare import render_optional_compare
+    render_optional_compare(
+        label='Nasdaq', key='ndx', yahoo_ticker='NQ=F',
+        target_day=day, groups=profiles,
+        strike_field='strike_index', gamma_field='net_gamma',
+        source_name='NDX', price_name='NQ',
+        price_scale=1.0, price_shift=basis if basis is not None else 0.0,
+        reference_close=reference, available=basis is not None,
+        unavailable_reason='Per il confronto con le candele NQ '
+                           'serve il differenziale NQ–NDX verificato.',
+        toggle_key='ndx_show_candle_compare', radio_key='ndx_candle_profile',
+    )
 
     # Pine NQ/MNQ: usa il generatore dedicato gia' esistente.
     # Traslazione solo se NQ-NDX e' disponibile, nessun basis zero inventato.
