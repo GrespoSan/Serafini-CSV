@@ -73,6 +73,16 @@ st.markdown("""
     color: #ff626b !important;
     font-weight: 750 !important;
 }
+/* Gli stessi comandi Pine sono condivisi fra NDX, Russell, Dow, GLD, USO e Azioni. */
+[class*="st-key-pine_download_"] button,
+[class*="st-key-pine_download_"] button p,
+[class*="st-key-pine_download_"] button span,
+[class*="st-key-pine_copy_"] [data-testid="stExpander"] summary,
+[class*="st-key-pine_copy_"] [data-testid="stExpander"] summary p,
+[class*="st-key-pine_copy_"] [data-testid="stExpander"] summary span {
+    color: #ff626b !important;
+    font-weight: 750 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
