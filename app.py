@@ -57,7 +57,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
-context_slot = st.empty()
+asia_panel = None
 photo_day = None
 upload = None
 store = None
@@ -80,19 +80,16 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
                 week = store.week
                 snaps = store.list(f"{week}/snapshots/")
                 st.session_state[f"serafini_selected_snapshot_{week}"] = store.filename
-                render(store, week, snaps, [], show_heading=False, selector_external=True)
+                asia_panel = render(store, week, snaps, [], show_heading=False, selector_external=True)
             else:
                 photo_day = render_market(upload, symbol, equity)
         except (InvalidLocalSnapshot, InvalidCboeCSV, ValueError) as exc:
             st.error(str(exc))
 
-with context_slot.container():
-    with st.expander("ANALISI DEL CONTESTO — News · Volatilità · Trend Daily", expanded=False):
-        iso = (photo_day or datetime.now(ZoneInfo("Europe/Rome")).date()).isocalendar()
-        week_label = store.week if store else f"{iso.year}-W{iso.week:02d}"
-        st.markdown(f"**Settimana ISO (AAAA-WNN)** · {week_label}")
-        context_details_slot = st.empty()
-with context_details_slot.container():
+with st.expander("ANALISI DEL CONTESTO — News · Volatilità · Trend Daily", expanded=False):
+    iso = (photo_day or datetime.now(ZoneInfo("Europe/Rome")).date()).isocalendar()
+    week_label = store.week if store else f"{iso.year}-W{iso.week:02d}"
+    st.markdown(f"**Settimana ISO (AAAA-WNN)** · {week_label}")
     # L'analisi viene visualizzata automaticamente; il download Massive ES
     # viene gestito dalla cache condivisa giornaliera. Anche con expander
     # chiuso il codice esegue, ma i dati Massive già letti non si riscaricano.
@@ -128,3 +125,14 @@ with context_details_slot.container():
                        contract=es_daily_context.get('ticker'),
                        daily_error=daily_error,
                        modeled_gex=None)
+
+    # Il Quadro Asia segue il Trend Daily ed è interno all'Analisi del contesto.
+    # È disponibile soltanto con una fotografia SPX; nessun dato sintetico.
+    if asia_panel is not None:
+        st.divider()
+        st.subheader("QUADRO OPERATIVO — ORE 09:00")
+        from asia_gamma import render_auto as render_asia_gamma
+        render_asia_gamma(
+            asia_panel['day'], asia_panel['c1_es'], asia_panel['p1_es'],
+            level_context=asia_panel['level_context'],
+        )
