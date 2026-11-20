@@ -189,7 +189,7 @@ def comparison_chart(group, candles, *, strike_field: str, gamma_field: str,
         hovermode="closest",
     )
     figure.update_xaxes(
-        title_text=f"{future_name} futures · 5 minuti · ora Roma {target_day:%d/%m/%Y}",
+        title_text=f"{future_name} · 5 minuti · ora Roma {target_day:%d/%m/%Y}",
         type="date", range=[first_time, end_time], autorange=False,
         tick0=first_time, dtick=3 * 60 * 60 * 1000,
         tickformat="%H:%M", rangeslider_visible=False,
@@ -213,13 +213,29 @@ def comparison_chart(group, candles, *, strike_field: str, gamma_field: str,
     return figure
 
 
+def _verified_csv_capture_utc(document):
+    """Solo timestamp UTC esplicitamente certificato dal parser CSV Cboe."""
+    if not isinstance(document, dict):
+        return None
+    provenance = document.get("_import_provenance") or {}
+    if provenance.get("timestamp_utc_converted") is not True:
+        return None
+    try:
+        return datetime.strptime(
+            str(document["timestamp"]), "%Y-%m-%d %H:%M:%S",
+        ).replace(tzinfo=UTC)
+    except (KeyError, ValueError, TypeError):
+        return None
+
+
 def render_optional_compare(*, label: str, key: str, yahoo_ticker: str,
                             target_day: date, groups: dict, strike_field: str,
                             gamma_field: str, source_name: str,
                             price_name: str, price_scale=1.0,
                             price_shift=0.0, reference_close=None,
                             available=True, unavailable_reason="",
-                            toggle_key=None, radio_key=None):
+                            toggle_key=None, radio_key=None,
+                            snapshot_doc=None):
     """Widget comune: nessun accesso ai prezzi senza scelta esplicita."""
     st.subheader(f"Confronto NET GAMMA / candele {label}")
     enabled = st.toggle(
@@ -248,6 +264,16 @@ def render_optional_compare(*, label: str, key: str, yahoo_ticker: str,
     try:
         with st.spinner(f"Lettura candele {yahoo_ticker} Yahoo a 5 minuti..."):
             candles = load_closed_candles(yahoo_ticker, target_day)
+        cutoff_utc = _verified_csv_capture_utc(snapshot_doc)
+        if cutoff_utc is not None:
+            # Un CSV storico non puo' mostrare candele chiuse DOPO la fotografia.
+            candles = candles.loc[
+                candles["bar_close"] <= pd.Timestamp(cutoff_utc)
+            ].reset_index(drop=True)
+            if candles.empty:
+                raise ValueError(
+                    "Nessuna candela 5m conclusa entro la fotografia Cboe."
+                )
         figure = comparison_chart(
             groups[selected], candles, strike_field=strike_field,
             gamma_field=gamma_field, source_name=source_name,
@@ -260,6 +286,9 @@ def render_optional_compare(*, label: str, key: str, yahoo_ticker: str,
         st.caption(
             f"Candele Yahoo {yahoo_ticker} a 5 minuti chiusi, "
             f"giornata {target_day:%d/%m/%Y} (Roma). "
+            + (f"Fino al CSV Cboe {cutoff_utc.astimezone(ROME):%H:%M} Roma. "
+               if cutoff_utc is not None else
+               "Orario acquisizione CSV non certificato: confronto descrittivo. ")
             "Prezzo e NET GAMMA condividono l'asse Y; "
             "gli strike sono originali e il Gamma non viene ricalcolato. "
             "Il continuo Yahoo puo' differire dal TradingView dopo il rollover."
