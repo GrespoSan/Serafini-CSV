@@ -53,17 +53,24 @@ st.markdown("""
     padding-left: clamp(1rem, 2vw, 3rem);
     padding-right: clamp(1rem, 2vw, 3rem);
 }
+/* Colora solo l'etichetta e il valore del selettore mercati. */
+.st-key-mercato_selector label p,
+.st-key-mercato_selector [data-baseweb="select"] > div,
+.st-key-mercato_selector [data-baseweb="select"] span {
+    color: #55d5f6 !important;
+    font-weight: 700 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 
-asia_panel = None
+asia_day = None
 photo_day = None
 upload = None
 store = None
 with st.expander("ANALISI NET GAMMA", expanded=True):
     st.header("NET GAMMA · formula Serafini")
-    market = st.selectbox("Mercato", list(MARKETS))
+    market = st.selectbox("Mercato", list(MARKETS), key="mercato_selector")
     equity = market == "Azioni"
     symbol = st.text_input("Ticker azione", value="AAPL").strip().upper() if equity else MARKETS[market]
     st.subheader(f"Fotografia opzioni Cboe · {symbol}")
@@ -80,7 +87,7 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
                 week = store.week
                 snaps = store.list(f"{week}/snapshots/")
                 st.session_state[f"serafini_selected_snapshot_{week}"] = store.filename
-                asia_panel = render(store, week, snaps, [], show_heading=False, selector_external=True)
+                asia_day = render(store, week, snaps, [], show_heading=False, selector_external=True)
             else:
                 photo_day = render_market(upload, symbol, equity)
         except (InvalidLocalSnapshot, InvalidCboeCSV, ValueError) as exc:
@@ -128,11 +135,8 @@ with st.expander("ANALISI DEL CONTESTO — News · Volatilità · Trend Daily", 
 
     # Il Quadro Asia segue il Trend Daily ed è interno all'Analisi del contesto.
     # È disponibile soltanto con una fotografia SPX; nessun dato sintetico.
-    if asia_panel is not None:
+    if asia_day is not None:
         st.divider()
         st.subheader("QUADRO OPERATIVO — ORE 09:00")
         from asia_gamma import render_auto as render_asia_gamma
-        render_asia_gamma(
-            asia_panel['day'], asia_panel['c1_es'], asia_panel['p1_es'],
-            level_context=asia_panel['level_context'],
-        )
+        render_asia_gamma(asia_day)
