@@ -712,12 +712,12 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                 'acquisito entro le 09:00 Roma. Metodo sperimentale; '
                 'non costituisce conferma dei veri livelli Serafini.'
             )
-    # Quadro dopo i profili e i selettori, sempre visibile fuori dall'expander.
-    with st.expander('QUADRO OPERATIVO — ORE 09:00', expanded=False):
-        # Il modulo originale di volatilita' e' visualizzato nel contesto iniziale.
-        # Nessuna modifica a calcoli Gamma, C1/P1 o analisi asiatica.
-        from asia_gamma import render_auto as render_asia_gamma
-        render_asia_gamma(day, asia_c1, asia_p1, level_context=asia_level_context)
+    # Il Quadro 09:00 viene mostrato dal chiamante nel pannello Contesto,
+    # dopo il Trend Daily; qui restano invariati i calcoli ex ante.
+    asia_panel = {
+        'day': day, 'c1_es': asia_c1, 'p1_es': asia_p1,
+        'level_context': asia_level_context,
+    }
 
     if offset is not None and all(computed_profiles.get(k, {}).get('rows') for k in ('0DTE', 'Weekly')):
         from pine_export import make_pine
@@ -734,3 +734,5 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
             with st.expander('Visualizza e copia codice Pine', expanded=False):
                 st.caption('Usa l’icona Copia in alto a destra del codice per incollarlo in TradingView.')
                 st.code(script, language=None, wrap_lines=False)
+
+    return asia_panel
