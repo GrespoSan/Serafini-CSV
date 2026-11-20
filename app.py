@@ -101,7 +101,10 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
             f"[↗ Apri Cboe](https://www.cboe.com/data/quotes/{symbol}/options)"
         )
     else:
-        st.subheader("Fotografia opzioni Cboe · Azioni")
+        st.markdown(
+            "### Fotografia opzioni Cboe · Azioni · "
+            "[↗ Apri Cboe (NVDA)](https://www.cboe.com/data/quotes/NVDA/options)"
+        )
     upload = st.file_uploader("Carica il CSV della catena opzioni Cboe", type=["csv"], key=f"csv_{market}")
     if upload is not None:
         try:
