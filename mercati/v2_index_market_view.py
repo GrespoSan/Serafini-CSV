@@ -304,6 +304,21 @@ def render(ticker):
         except (ValueError, TypeError, KeyError) as exc:
             st.warning(f'Pine {ticker} non generato: {exc}')
 
+    def _show_index_price_compare():
+        from mercati.gamma_price_compare import render_optional_compare
+        render_optional_compare(
+            label="Russell 2000" if ticker == "RUT" else "Dow Jones",
+            key=f"index_{ticker.lower()}",
+            yahoo_ticker="RTY=F" if ticker == "RUT" else "YM=F",
+            target_day=day, groups=groups,
+            strike_field="strike", gamma_field="net",
+            source_name=ticker, price_name=future,
+            price_scale=factor, price_shift=basis if basis is not None else 0.0,
+            reference_close=close, available=basis is not None,
+            unavailable_reason=f"Serve un differenziale {future} verificato; "
+                               "non tratto gli strike indice come livelli future.",
+        )
+
     rows = [r for g in groups.values() for r in g["rows"]]
     from mercati.v2_gamma_summary import render_gamma_summary
     render_gamma_summary(groups.values(), net_key="net", call_key="call",
@@ -322,6 +337,7 @@ def render(ticker):
         for (name, group), column in zip(groups.items(), st.columns(len(groups))):
             column.plotly_chart(_chart(group, ticker, 1, 0, native_x, native_y, close, name),
                                 key=f"{prefix}_native_{name}_{day}")
+        _show_index_price_compare()
         _show_index_pine(project_to_future=False)
         return
     from mercati.gamma_chart_style import spx_shared_gamma_bounds
@@ -341,6 +357,8 @@ def render(ticker):
             )
             st.caption(f"{len(group['rows'])} strike originali · "
                        f"copertura {group['coverage']:.0%}")
+    _show_index_price_compare()
+
     # Come NQ/GC/CL: tre Pine temporali reali e un solo pannello di codice.
     # Il CSV dei livelli correnti resta indipendente, per audit.
     output = io.StringIO()
