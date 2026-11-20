@@ -311,3 +311,32 @@ def render_selected_market(market_key):
                 st.warning(f'Candele NQ a 5 minuti non disponibili: {str(exc)[:240]}. '
                            'Il profilo NET GAMMA rimane accessibile sopra.')
     
+
+    # Pine NQ/MNQ: usa il generatore dedicato gia' esistente.
+    # Traslazione solo se NQ-NDX e' disponibile, nessun basis zero inventato.
+    if basis is not None:
+        from mercati.pine_export import make_pine as make_ndx_pine
+        from mercati.pine_ui import render_pine_controls
+        original_count = sum(len(g['rows']) for g in profiles.values())
+        extended_count = sum(len(g['rows']) for g in visual_profiles.values())
+        # Il limite Pine e' 480 livelli; mai ridurre automaticamente gli strike.
+        export_profiles = (visual_profiles if show_extension and extended_count <= 480
+                           else profiles)
+        if show_extension and extended_count > 480:
+            st.caption(f'Pine NQ/MNQ: estensione {extended_count} strike oltre il limite '
+                       f'di 480; esportati gli {original_count} strike originali '
+                       'senza modifiche ai NET GAMMA.')
+        try:
+            main_kind = '0DTE' if '0DTE' in profiles else 'Principale'
+            script = make_ndx_pine(
+                export_profiles, basis, day, main_kind,
+                acquisition_time=None,  # CSV Cboe: ora download non certificata
+            )
+            render_pine_controls(
+                'NQ / MNQ', script, f'NDX_NQ_NET_GAMMA_{day.isoformat()}.pine',
+                'ndx',
+            )
+        except (ValueError, KeyError, TypeError) as exc:
+            st.warning(f'Pine NQ/MNQ non generato: {exc}')
+    else:
+        st.caption('Pine NQ/MNQ non disponibile senza differenziale NQ–NDX verificato.')
