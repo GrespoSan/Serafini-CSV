@@ -246,6 +246,7 @@ def render_gld_cboe():
         strike_field="strike", gamma_field="net",
         source_name="GLD", price_name="GC" if projected else "GLD",
         price_scale=axes["price_ratio"], reference_close=reference,
+        snapshot_doc=data,
     )
     if not projected:
         st.caption("Confronto su GLD originale: nessuna conversione "
