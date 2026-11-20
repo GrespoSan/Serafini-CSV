@@ -82,11 +82,39 @@ def load_closed_candles(ticker: str, target_day: date):
     return candles.reset_index()
 
 
+def _spx_price_zoom_bounds(candles, levels, close, *, complete=False):
+    """Scala della versione SPX replay: prezzi osservati per default, strike se richiesti.
+
+    La soglia fissa 12 pt di ES viene riproporzionata al sottostante:
+    12 / 7500 del close, senza deformare il confronto tra asset diversi.
+    """
+    reference = float(close) if close is not None else float(candles["close"].iloc[-1])
+    if not math.isfinite(reference) or reference <= 0:
+        raise ValueError("Close di riferimento non valido.")
+    observed = [float(v) for col in ("low", "high")
+                for v in candles[col] if math.isfinite(float(v)) and float(v) > 0]
+    if close is not None:
+        observed.append(reference)
+    active = list(observed)
+    if complete or not active:
+        active.extend(float(v) for v in levels
+                      if math.isfinite(float(v)) and float(v) > 0)
+    if not active:
+        raise ValueError("Nessun prezzo valido per la scala.")
+    lo, hi = min(active), max(active)
+    span = hi - lo
+    margin = max(12.0 * (reference / 7500.0), span * .12,
+                 reference * .004)
+    center = (lo + hi) / 2.0
+    half = max(span / 2.0 + margin, reference * .005)
+    return [center - half, center + half]
+
+
 def comparison_chart(group, candles, *, strike_field: str, gamma_field: str,
                      source_name: str, future_name: str, group_name: str,
                      price_scale=1.0, price_shift=0.0,
-                     reference_close=None):
-    """Due grafici affiancati, asse Y di prezzo comune, NET GAMMA invariato."""
+                     reference_close=None, zoom_complete=False):
+    """Base SPX: Candele (sx 62%) + NET GAMMA (dx 38%), stesso asse prezzo."""
     scale, shift = float(price_scale), float(price_shift)
     if not (math.isfinite(scale) and scale > 0 and math.isfinite(shift)):
         raise ValueError("Rapporto o differenziale prezzo non valido.")
@@ -99,54 +127,90 @@ def comparison_chart(group, candles, *, strike_field: str, gamma_field: str,
         raise ValueError("Strike convertiti non validi.")
     if not all(math.isfinite(v) for v in gamma):
         raise ValueError("NET GAMMA non valido.")
-    low = min(min(prices), float(candles["low"].min()))
-    high = max(max(prices), float(candles["high"].max()))
-    if reference_close is not None:
-        close_level = float(reference_close) * scale + shift
-        if not math.isfinite(close_level) or close_level <= 0:
-            raise ValueError("Close di riferimento non valido.")
-        low, high = min(low, close_level), max(high, close_level)
-    else:
-        close_level = None
-    padding = max((high - low) * 0.025, max(abs(high), 1.0) * 0.0001)
-    ordered = sorted(set(prices))
-    steps = [b - a for a, b in zip(ordered, ordered[1:]) if b > a]
-    thickness = min(min(steps) * .72, max(high - low, 1) * 0.011) if steps else max(high - low, 1) * .008
-    fig = make_subplots(
-        rows=1, cols=2, shared_yaxes=True,
-        column_widths=[.40, .60], horizontal_spacing=.04,
-        subplot_titles=(f"NET GAMMA {group_name}", f"PREZZO {future_name} · 5 minuti"),
+
+    close_level = (float(reference_close) * scale + shift
+                   if reference_close is not None else None)
+    y_bounds = _spx_price_zoom_bounds(
+        candles, prices, close_level, complete=zoom_complete,
     )
-    fig.add_trace(go.Bar(
+    ordered = sorted(set(prices))
+    gaps = [b - a for a, b in zip(ordered, ordered[1:]) if b > a]
+    span = max(prices) - min(prices)
+    thickness = max(min(min(gaps) * .72, max(span, 1.0) * .011)
+                    if gaps else max(span, 1.0) * .008,
+                    max(span, 1.0) * .0001)
+
+    # Plotly usa timestamp civili di Roma; il cutoff OHLC resta timezone-aware.
+    bar_times = [
+        value.to_pydatetime().astimezone(ROME).replace(
+            tzinfo=None).isoformat(timespec="seconds")
+        for value in pd.to_datetime(candles["bar_close"])
+    ]
+    target_day = pd.Timestamp(candles["bar_close"].iloc[0]).tz_convert(ROME).date()
+    first_time = datetime.combine(target_day, time.min).isoformat(timespec="seconds")
+    last_at = max(
+        datetime.combine(target_day, time(18, 35)),
+        datetime.fromisoformat(bar_times[-1]) + timedelta(minutes=5),
+    )
+    end_time = last_at.isoformat(timespec="seconds")
+    figure = make_subplots(
+        rows=1, cols=2, shared_yaxes=True, horizontal_spacing=.035,
+        column_widths=[.62, .38],
+        subplot_titles=(f"PREZZO {future_name} · 5 minuti", f"NET GAMMA {group_name}"),
+    )
+    figure.add_trace(go.Candlestick(
+        x=bar_times,
+        open=candles["open"], high=candles["high"],
+        low=candles["low"], close=candles["close"],
+        increasing_line_color="#22c55e", decreasing_line_color="#ef4444",
+        increasing_fillcolor="#22c55e", decreasing_fillcolor="#ef4444",
+        name=future_name, showlegend=False,
+    ), row=1, col=1)
+    figure.add_trace(go.Bar(
         x=gamma, y=prices, width=thickness, orientation="h",
         marker_color=["#21cb82" if v >= 0 else "#f34e59" for v in gamma],
         customdata=[float(row[strike_field]) for row in rows],
         hovertemplate=(
-            f"{future_name} %{{y:,.2f}}<br>Strike {source_name} "
+            f"{future_name} %{{y:,.2f}}<br>Strike {source_name}: "
             "%{customdata:,.2f}<br>NET GAMMA %{x:+.6f}<extra></extra>"
         ), name="NET GAMMA", showlegend=False,
-    ), row=1, col=1)
-    fig.add_trace(go.Candlestick(
-        x=candles["bar_close"],
-        open=candles["open"], high=candles["high"],
-        low=candles["low"], close=candles["close"],
-        increasing_line_color="#21b77c", decreasing_line_color="#e65353",
-        name=future_name, showlegend=False,
     ), row=1, col=2)
-    for col in (1, 2):
-        fig.update_yaxes(range=[low - padding, high + padding], row=1, col=col)
-        if close_level is not None:
-            fig.add_hline(y=close_level, line_color="#f0cc65",
-                          line_width=1.4, line_dash="dash", row=1, col=col)
-    fig.update_layout(
-        height=700, margin=dict(l=38, r=20, t=64, b=45),
+
+    if close_level is not None:
+        for column in (1, 2):
+            figure.add_hline(
+                y=close_level, line_color="#f0cc65",
+                line_width=1.4, line_dash="dash", row=1, col=column,
+            )
+
+    figure.update_layout(
+        height=700, margin=dict(l=18, r=18, t=65, b=55),
         template="plotly_dark", barmode="relative", showlegend=False,
+        hovermode="closest",
     )
-    fig.update_yaxes(title_text=f"Prezzo {future_name}", row=1, col=1)
-    fig.update_xaxes(title_text="NET GAMMA originale", row=1, col=1)
-    fig.update_xaxes(title_text="Ora Roma · candele 5m chiuse",
-                     rangeslider_visible=False, row=1, col=2)
-    return fig
+    figure.update_xaxes(
+        title_text=f"{future_name} futures · 5 minuti · ora Roma {target_day:%d/%m/%Y}",
+        type="date", range=[first_time, end_time], autorange=False,
+        tick0=first_time, dtick=3 * 60 * 60 * 1000,
+        tickformat="%H:%M", rangeslider_visible=False,
+        row=1, col=1,
+    )
+    figure.update_xaxes(
+        title_text="NET GAMMA originale", zeroline=True,
+        fixedrange=True, row=1, col=2,
+    )
+    figure.update_yaxes(
+        title_text=f"Prezzo {future_name}",
+        range=y_bounds, autorange=False, fixedrange=False,
+        tickformat=",.2f", row=1, col=1,
+    )
+    # La sincronizzazione fisica degli assi Y e' fondamentale anche per
+    # zoom/pan; non passare due range indipendenti a Plotly.
+    figure.update_yaxes(
+        matches="y", fixedrange=False, tickformat=",.2f",
+        row=1, col=2,
+    )
+    return figure
 
 
 def render_optional_compare(*, label: str, key: str, yahoo_ticker: str,
@@ -154,12 +218,13 @@ def render_optional_compare(*, label: str, key: str, yahoo_ticker: str,
                             gamma_field: str, source_name: str,
                             price_name: str, price_scale=1.0,
                             price_shift=0.0, reference_close=None,
-                            available=True, unavailable_reason=""):
+                            available=True, unavailable_reason="",
+                            toggle_key=None, radio_key=None):
     """Widget comune: nessun accesso ai prezzi senza scelta esplicita."""
     st.subheader(f"Confronto NET GAMMA / candele {label}")
     enabled = st.toggle(
-        f"Mostra NET GAMMA a sinistra e candele {price_name} a destra",
-        value=False, key=f"gamma_candle_compare_{key}",
+        f"Mostra candele {price_name} a sinistra e NET GAMMA a destra",
+        value=False, key=toggle_key or f"gamma_candle_compare_{key}",
     )
     if not enabled:
         return
@@ -172,7 +237,13 @@ def render_optional_compare(*, label: str, key: str, yahoo_ticker: str,
         return
     selected = st.radio(
         "Profilo da confrontare", options,
-        horizontal=True, key=f"gamma_candle_profile_{key}",
+        horizontal=True, key=radio_key or f"gamma_candle_profile_{key}",
+    )
+    zoom_complete = st.checkbox(
+        "Mostra tutta la fascia strike (zoom completo)",
+        value=False, key=f"gamma_candle_zoom_full_{key}",
+        help="OFF: la scala verticale segue le escursioni reali delle candele "
+             "come nel Replay SPX. ON: include tutti gli strike selezionati.",
     )
     try:
         with st.spinner(f"Lettura candele {yahoo_ticker} Yahoo a 5 minuti..."):
@@ -182,7 +253,7 @@ def render_optional_compare(*, label: str, key: str, yahoo_ticker: str,
             gamma_field=gamma_field, source_name=source_name,
             future_name=price_name, group_name=selected,
             price_scale=price_scale, price_shift=price_shift,
-            reference_close=reference_close,
+            reference_close=reference_close, zoom_complete=zoom_complete,
         )
         st.plotly_chart(figure, use_container_width=True,
                         key=f"gamma_price_chart_{key}_{selected}_{target_day}")
