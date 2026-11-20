@@ -5,9 +5,7 @@ never changes. Only the y-axis undergoes a verified price mapping.
 """
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
-import io
 import math
-import csv
 import hashlib
 import streamlit as st
 import plotly.graph_objects as go
@@ -359,20 +357,4 @@ def render(ticker):
                        f"copertura {group['coverage']:.0%}")
     _show_index_price_compare()
 
-    # Come NQ/GC/CL: tre Pine temporali reali e un solo pannello di codice.
-    # Il CSV dei livelli correnti resta indipendente, per audit.
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(["scadenza", "strike_indice", "livello_future", "net_gamma_originale"])
-    for group in groups.values():
-        for row in group["rows"]:
-            writer.writerow([
-                group["expiry"], row["strike"], row["strike"] * factor + basis, row["net"],
-            ])
-    st.download_button(
-        "Esporta livelli verificati CSV",
-        output.getvalue(),
-        file_name=f"{ticker}_{future}_levels.csv",
-        mime="text/csv", key=f"{prefix}_csv",
-    )
     _show_index_pine(project_to_future=True)
