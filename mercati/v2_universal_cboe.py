@@ -193,7 +193,7 @@ def _chart(group, ticker, common_x):
     return fig
 
 
-def _pine(ticker, groups, *, future_mode=False, future_basis=0.0):
+def _pine(ticker, groups, *, future_mode=False, future_basis=0.0, future_ratio=None):
     """Same Serafini histogram renderer and one common Gamma scale for both profiles."""
     from mercati.pine_export import _pine_array, _initial_manual_scale, _top_gamma_rows
     from mercati.pine_spx_visual import spx_inputs, SPX_RENDER_FUNCTIONS
@@ -247,23 +247,39 @@ def _pine(ticker, groups, *, future_mode=False, future_basis=0.0):
         if wr else "")
     # Dedicated Russell/Dow market: transform ONLY the plotted price axis.
     # Universal CBOE remains on original index/stock strikes by default.
-    transform = (ticker == "RUT" and future_mode) or (ticker == "DJX" and future_mode)
-    factor = 100.0 if ticker == "DJX" else 1.0
-    if future_mode and ticker not in ("RUT", "DJX"):
-        raise ValueError("Esportazione future dedicata supportata solo per RUT e DJX")
-    if future_mode and not math.isfinite(float(future_basis)):
+    transform = future_mode and ticker in ("RUT", "DJX", "GLD", "USO")
+    if future_mode and not transform:
+        raise ValueError("Conversione future non supportata per questo sottostante.")
+    if future_mode and ticker in ("GLD", "USO"):
+        if future_ratio is None:
+            raise ValueError("Rapporto ETF/future verificato non disponibile.")
+        ratio = float(future_ratio)
+        if not math.isfinite(ratio) or not 0 < ratio < 1000:
+            raise ValueError("Rapporto ETF/future non valido.")
+        factor = ratio
+    else:
+        factor = 100.0 if ticker == "DJX" else 1.0
+    if future_mode and ticker in ("RUT", "DJX") and not math.isfinite(float(future_basis)):
         raise ValueError("Differenziale indice/future non valido")
     if transform:
         main_render = main_render.replace("renderProfile(mainLevels,", "renderProfile(plotMainLevels,")
         weekly_render = weekly_render.replace("renderProfile(weeklyLevels,", "renderProfile(plotWeeklyLevels,")
         top3_code = top3_code.replace("drawOdteTopProjections(topCalls, topPuts)",
                                       "drawOdteTopProjections(plotTopCalls, plotTopPuts)")
-    future_inputs = (
-        f'indexFutureBasis = input.float({float(future_basis):.4f}, "Differenziale futuro − indice (punti)", step=0.1, '
-        'tooltip="Differenziale congelato su barre cash/future sincronizzate. '
-        'Controlla contratto e rollover. Modifica solo livelli visualizzati.")'
-        if transform else ""
-    )
+    if transform and ticker in ("GLD", "USO"):
+        future_inputs = (
+            f'etfFutureRatio = input.float({factor:.8f}, "Rapporto Future/ETF · M5 sincronizzati", '
+            'minval=0.000001, step=0.0001, '
+            'tooltip="Proiezione di strike ETF sul continuo futures, non opzioni future. '
+            'Controlla l’allineamento e il rollover.")'
+        )
+    else:
+        future_inputs = (
+            f'indexFutureBasis = input.float({float(future_basis):.4f}, "Differenziale futuro − indice (punti)", step=0.1, '
+            'tooltip="Differenziale congelato su barre cash/future sincronizzate. '
+            'Controlla contratto e rollover. Modifica solo livelli visualizzati.")'
+            if transform else ""
+        )
     future_arrays = (
         'var array<float> plotMainLevels = array.new_float()\n'
         'var array<float> plotWeeklyLevels = array.new_float()\n'
@@ -271,13 +287,16 @@ def _pine(ticker, groups, *, future_mode=False, future_basis=0.0):
         'var array<float> plotTopPuts = array.new_float()'
         if transform else ""
     )
+    factor_expression = ("etfFutureRatio" if ticker in ("GLD", "USO")
+                         else f"{factor:.1f}")
+    basis_expression = ("0.0" if ticker in ("GLD", "USO") else "indexFutureBasis")
     future_prepare = (
         '    array.clear(plotMainLevels)\n'
         '    array.clear(plotWeeklyLevels)\n'
         '    array.clear(plotTopCalls)\n'
         '    array.clear(plotTopPuts)\n'
-        f'    float basisFactor = {factor:.1f}\n'
-        '    float displayBasis = indexFutureBasis\n'
+        f'    float basisFactor = {factor_expression}\n'
+        f'    float displayBasis = {basis_expression}\n'
         '    for level in mainLevels\n'
         '        array.push(plotMainLevels, level * basisFactor + displayBasis)\n'
         '    for level in weeklyLevels\n'
@@ -291,15 +310,21 @@ def _pine(ticker, groups, *, future_mode=False, future_basis=0.0):
     # RUT index is displayed on RUT, RTY and M2K, DJX index on DJX,
     # YM and MYM. Futures-only transform is used only in dedicated market.
     ticker_guard = (
-        '(syminfo.root == "RTY" or syminfo.root == "M2K")'
+        '(syminfo.type == "futures" and (syminfo.root == "RTY" or syminfo.root == "M2K"))'
         if ticker == "RUT" and future_mode else
-        '(syminfo.root == "YM" or syminfo.root == "MYM")'
+        '(syminfo.type == "futures" and (syminfo.root == "YM" or syminfo.root == "MYM"))'
         if ticker == "DJX" and future_mode else
+        '(syminfo.type == "futures" and (syminfo.root == "GC" or syminfo.root == "MGC"))'
+        if ticker == "GLD" and future_mode else
+        '(syminfo.type == "futures" and (syminfo.root == "CL" or syminfo.root == "MCL"))'
+        if ticker == "USO" and future_mode else
         f'syminfo.ticker == "{ticker}"'
     )
     display_ticker = (
         "RTY" if future_mode and ticker == "RUT" else
-        "YM" if future_mode and ticker == "DJX" else ticker
+        "YM" if future_mode and ticker == "DJX" else
+        "GC" if future_mode and ticker == "GLD" else
+        "CL" if future_mode and ticker == "USO" else ticker
     )
     # Keep exactly the common SPX renderProfile function and line/label
     # cleanup; adapt only the per-column drawing scale and safety check.
