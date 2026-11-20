@@ -1,7 +1,7 @@
 """Modulo di sola lettura per l'app Serafini SPX Dashboard v2."""
 import json
 import math
-from datetime import date, timedelta, time
+from datetime import date
 from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
@@ -10,7 +10,7 @@ from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
 from gamma_scale import profile_gamma_bounds, gamma_components
 from serafini_sigma import serafini_cash_levels, add_sigma_markers
-from operational_levels import find_candidates, proposed_levels, candidate_csv
+from operational_levels import find_candidates
 from es_spx_basis import download_and_calculate
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -149,73 +149,6 @@ def _snapshot_download_clock(store, week, logs, file_name):
     """Orario di download a Roma; stessa cache per tutta la settimana."""
     idx=_snapshot_log_index(week,tuple(x['name'] for x in logs),store)
     return idx.get(f'{week}/snapshots/{file_name}',(None,None))[1]
-
-
-@st.cache_data(ttl=300, show_spinner=False, max_entries=32)
-def _morning_asia_candidates(week, target, log_names, _store):
-    """Individua C1/P1 *sperimentali* esclusivamente dal Cboe delle 07:30.
-
-    Si basa sul log del download ufficiale, con verifica della data/ora
-    di acquisizione: un download dopo le 09:00 non è valido.
-    Non utilizza lo snapshot selezionato né dati successivi.
-    """
-    from net_gamma import profile, read_snapshot
-
-    rome = ZoneInfo("Europe/Rome")
-    eligible = []
-    for log_name in log_names:
-        try:
-            entry = json.loads(_store.download(f"{week}/logs/{log_name}"))
-            if (entry.get("scheduled_slot") != "30 7 * * 1-5"
-                    or entry.get("rome_date") != target.isoformat()
-                    or entry.get("status") not in ("NUOVO", "INVARIATO")):
-                continue
-            name = str(entry.get("file") or "")
-            if not name.startswith(f"{week}/snapshots/SPX_CBOE_{target:%Y%m%d}_"):
-                continue
-            raw = entry.get("download_rome") or entry.get("download_utc")
-            dt = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
-            if dt.tzinfo is None:
-                continue
-            dt = dt.astimezone(rome)
-            if dt.date() == target and dt.time() <= time(9, 0):
-                eligible.append((dt, name))
-        except (KeyError, ValueError, TypeError, RuntimeError, OSError, OverflowError):
-            continue
-
-    for dt, source in sorted(eligible):
-        try:
-            snap = read_snapshot(_store.download(source))
-            reference = float(snap["data"].get("prev_day_close"))
-            if not math.isfinite(reference) or reference <= 0:
-                continue
-            rows = profile(snap, target, reference).get("rows") or []
-            if len(rows) != 50:
-                continue
-            proposed = proposed_levels(find_candidates(rows, reference))
-            if not all(k in proposed for k in ("C1", "C2", "C3", "P1", "P2", "P3")):
-                continue
-            c1 = float(proposed["C1"]["strike_spx"])
-            p1 = float(proposed["P1"]["strike_spx"])
-            if not (p1 < reference < c1):
-                continue
-            return {
-                "source": source.rsplit("/", 1)[-1],
-                "download_rome": dt.isoformat(timespec="seconds"),
-                "reference_spx": reference,
-                "c1_spx": c1, "p1_spx": p1,
-                "method": "3 massime intensità per lato — NON LIVELLI CONFERMATI",
-            }
-        except (KeyError, ValueError, TypeError, RuntimeError, OSError, OverflowError):
-            continue
-    return None
-
-
-
-
-
-
-
 
 
 
@@ -367,8 +300,6 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         'day': day, 'ref': ref, 'offset': offset, 'weekly_exp': weekly_exp,
         'snapshot': choice,
     }
-    asia_c1 = None
-    asia_p1 = None
     computed_profiles = {}
     candidate_0dte = None
     if day.weekday() == 4:
@@ -663,61 +594,11 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
         snapshot_description = (
             'Ultimo rilevamento' if choice == names[0] else acquisition_label
         )
-        # Un unico laboratorio: selezione Cboe O simulazione manuale, non
-        # due tabelle ripetute. La funzione restituisce SOLTANTO le scelte
-        # automatiche, mai gli strike ipotetici della simulazione.
-        chosen = render_lab(
+        # Conserva il laboratorio Cboe indipendente dal Quadro Asia.
+        render_lab(
             candidate_0dte, computed_profiles.get('0DTE'), offset,
             day, choice, ref, snapshot_description, download_clock,
         )
-        if chosen:
-            asia_c1 = (chosen['C1']['strike_spx'] + offset
-                       if offset is not None else None)
-            asia_p1 = (chosen['P1']['strike_spx'] + offset
-                       if offset is not None else None)
-            # Il QUADRO 09:00 non usa dati futuri, anche se il laboratorio
-            # viene aperto dopo il rilevamento.
-            if download_clock is None or download_clock > '09:00':
-                asia_c1 = None
-                asia_p1 = None
-            st.session_state[f'asia_levels_{day.isoformat()}'] = {
-                'snapshot': choice, 'reference_spx': float(ref),
-                'basis': offset, 'c1_spx': chosen['C1']['strike_spx'],
-                'p1_spx': chosen['P1']['strike_spx'],
-                'selection': 'candidati Cboe selezionati · nessuna simulazione',
-            }
-    # Quadro storico delle 09:00 indipendente dallo snapshot selezionato.
-    # Se il selezionato è successivo alle 09:00, recupera SOLTANTO il 07:30
-    # ufficiale, verificandone il log con data/ora completa e scadenza 0DTE.
-    asia_level_context = None
-    if offset is not None and math.isfinite(offset):
-        if asia_c1 is None or asia_p1 is None:
-            log_names = tuple(sorted(str(item['name']) for item in logs))
-            morning = _morning_asia_candidates(week, day, log_names, store)
-            if morning:
-                asia_c1 = morning['c1_spx'] + offset
-                asia_p1 = morning['p1_spx'] + offset
-                asia_level_context = (
-                    'Riferimenti indicativi C1/P1 ricavati dallo snapshot UFFICIALE '
-                    '07:30 Roma (' + morning['download_rome'][11:16] + ') · '
-                    + morning['source']
-                    + f" · SPX prev. {morning['reference_spx']:,.2f} "
-                    + f"· basis ES-SPX {offset:+.0f} punti. "
-                    'Metodo sperimentale top 3 per intensità: '
-                    'NON sono C1/P1 confermati da Serafini.'
-                )
-        else:
-            asia_level_context = (
-                'C1/P1 selezionati manualmente nello snapshot corrente '
-                'acquisito entro le 09:00 Roma. Metodo sperimentale; '
-                'non costituisce conferma dei veri livelli Serafini.'
-            )
-    # Il Quadro 09:00 viene mostrato dal chiamante nel pannello Contesto,
-    # dopo il Trend Daily; qui restano invariati i calcoli ex ante.
-    asia_panel = {
-        'day': day, 'c1_es': asia_c1, 'p1_es': asia_p1,
-        'level_context': asia_level_context,
-    }
 
     if offset is not None and all(computed_profiles.get(k, {}).get('rows') for k in ('0DTE', 'Weekly')):
         from pine_export import make_pine
@@ -735,4 +616,4 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                 st.caption('Usa l’icona Copia in alto a destra del codice per incollarlo in TradingView.')
                 st.code(script, language=None, wrap_lines=False)
 
-    return asia_panel
+    return day
