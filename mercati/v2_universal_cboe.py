@@ -440,12 +440,10 @@ def render_equity(doc, ticker, now):
         # Solo sezione Universale: nessun differenziale ETF/indice/future.
         # Non modificare _pine: il ramo future_mode serve a Russell/Dow.
         pine = _pine(ticker, groups, future_mode=False)
-        st.download_button(f"Scarica Pine {ticker} (.pine)", pine,
-                           file_name=f"{ticker}_NET_GAMMA_CBOE.pine",
-                           mime="text/plain", key="universal_pine_export",
-                           on_click="ignore")
-        with st.expander("Mostra codice Pine da copiare", expanded=False):
-            st.code(pine, language="pine")
+        from mercati.pine_ui import render_pine_controls
+        render_pine_controls(
+            ticker, pine, f"{ticker}_NET_GAMMA_CBOE.pine", "equity",
+        )
         st.caption("Pine statico: strike originali sul grafico del solo ticker inserito. "
                    "Non contiene conversioni né aggiornamento automatico.")
     except ValueError as exc:
