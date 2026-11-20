@@ -1,4 +1,7 @@
 import json
+import csv
+import io
+import re
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
@@ -11,6 +14,26 @@ from mercati.v2_universal_cboe import render_equity
 MARKETS = {"SP500": "SPX", "Nasdaq": "NDX", "Russell": "RUT", "Dow Jones": "DJX",
            "Gold": "GLD", "Petrolio": "USO", "Azioni": None}
 ENGINES = {"NDX": "NASDAQ", "RUT": "RUSSELL", "DJX": "DOW", "GLD": "GOLD", "USO": "WTI"}
+
+def ticker_azione_da_csv(payload: bytes) -> str:
+    """Ricava il ticker dalla intestazione Cboe, mai dal nome file o per ipotesi."""
+    from cboe_csv_import import InvalidCboeCSV
+    if not isinstance(payload, bytes) or not payload:
+        raise InvalidCboeCSV("CSV azionario vuoto.")
+    try:
+        header = payload[:16384].decode("utf-8-sig")
+    except UnicodeDecodeError:
+        header = payload[:16384].decode("cp1252")
+    first_row = next(csv.reader(io.StringIO(header)), [])
+    title = first_row[0].strip().upper() if first_row else ""
+    matches = set(re.findall(r"\\(\\s*\\^?([A-Z][A-Z0-9.\\-]{0,14})\\s*\\)", title))
+    if len(matches) != 1:
+        raise InvalidCboeCSV(
+            "Ticker azionario non identificabile nell'intestazione Cboe. "
+            "Carica il CSV originale con il simbolo tra parentesi, es. (AAPL)."
+        )
+    return next(iter(matches))
+
 
 @st.cache_data(max_entries=8, show_spinner=False)
 def parse_csv(payload, ticker):
