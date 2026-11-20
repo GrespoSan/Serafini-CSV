@@ -16,6 +16,9 @@ from zoneinfo import ZoneInfo
 MAX_CSV_BYTES = 25 * 1024 * 1024
 MAX_CSV_ROWS = 60000
 CODE = re.compile(r"^(SPXW?)(\d{6})([CP])(\d{8})$", re.I)
+# Used only to IDENTIFY different OCC roots in Root=All exports; never
+# reinterpret those contracts as standard options of the requested ticker.
+OTHER_OCC_CODE = re.compile(r"^([A-Z0-9.-]+)(\d{6})([CP])(\d{8})$", re.I)
 MONTHS = {
     "gennaio": "January", "febbraio": "February", "marzo": "March",
     "aprile": "April", "maggio": "May", "giugno": "June",
@@ -218,6 +221,7 @@ def csv_to_snapshot(payload, symbol="SPX"):
     options = []
     seen = set()
     omitted = 0
+    omitted_roots = {}
     for row in lines[header_at+1:]:
         if not any(c.strip() for c in row):
             continue
@@ -239,6 +243,17 @@ def csv_to_snapshot(payload, symbol="SPX"):
                 # SPXO is not a supported original Serafini OCC root.
                 if symbol == "SPX" and ident.startswith("SPX"):
                     omitted += 1
+                    omitted_roots["SPXO/altre SPX"] = omitted_roots.get("SPXO/altre SPX", 0) + 1
+                    continue
+                # Cboe Root=All can include separate OCC roots (for example
+                # B1VDA alongside standard NVDA). They may have a different
+                # deliverable, so do NOT add their gamma/OI/volume to NVDA.
+                # Only skip a structurally valid OCC code of another root.
+                other_occ = OTHER_OCC_CODE.fullmatch(ident)
+                if symbol != "SPX" and other_occ and other_occ.group(1) != symbol:
+                    root = other_occ.group(1)
+                    omitted += 1
+                    omitted_roots[root] = omitted_roots.get(root, 0) + 1
                     continue
                 raise InvalidCboeCSV(f"CSV: opzione incompatibile con {symbol}: " + ident[:24])
             if match.group(3) != expected:
@@ -261,9 +276,15 @@ def csv_to_snapshot(payload, symbol="SPX"):
                 if source in c:
                     item[extra] = _number(row[c[source]], extra, empty_zero=True)
             options.append(item)
+    if not options and symbol != "SPX":
+        rejected = ", ".join(sorted(omitted_roots)) or "nessuna"
+        raise InvalidCboeCSV(
+            f"CSV: nessun contratto standard della radice {symbol}. "
+            f"Radici presenti ma escluse: {rejected}. "
+            f"Nel portale Cboe seleziona Root = {symbol}, poi View Chain e Download CSV.")
     if (symbol == "SPX" and len(options) < 100) or not any(opt["gamma"] > 0 for opt in options):
         raise InvalidCboeCSV(
-            "CSV: catena SPX insufficiente o senza Gamma. "
+            f"CSV: catena {symbol} insufficiente o senza Gamma. "
             "Seleziona Options Range = All, poi View Chain e Download CSV.")
     # Detect narrow Cboe 'Near the Money' exports before attempting 25+25.
     # Report coverage, but do not invent strikes or change Serafini's method.
@@ -309,6 +330,7 @@ def csv_to_snapshot(payload, symbol="SPX"):
             "coverage_by_expiry": coverage,
             "contracts": len(options),
             "unsupported_contracts_excluded": omitted,
+            "unsupported_contract_roots": dict(sorted(omitted_roots.items())),
             "not_original_cboe_json": True,
             "filtered_chain_possible": True,
         },
