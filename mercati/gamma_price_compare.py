@@ -16,7 +16,7 @@ import streamlit as st
 
 ROME = ZoneInfo("Europe/Rome")
 UTC = timezone.utc
-FUTURES = {"ES=F", "RTY=F", "YM=F", "GC=F", "CL=F"}
+FUTURES = {"ES=F", "NQ=F", "RTY=F", "YM=F", "GC=F", "CL=F"}
 
 
 @st.cache_data(ttl=300, show_spinner=False, max_entries=24)
