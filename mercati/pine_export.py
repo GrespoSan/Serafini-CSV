@@ -82,7 +82,7 @@ def make_pine(profiles: dict, basis: float, target: date, label: str,
               acquisition_time=None) -> str:
     if not profiles or not isfinite(float(basis)):
         raise ValueError("NET GAMMA o differenziale NQ-NDX non valido.")
-    if any(name not in ("0DTE","Weekly") for name in profiles):
+    if any(name not in ("0DTE", "Principale", "Weekly") for name in profiles):
         raise ValueError("Profilo Pine sconosciuto.")
     for group in profiles.values():
         if not group.get("rows"):
@@ -95,14 +95,15 @@ def make_pine(profiles: dict, basis: float, target: date, label: str,
             "per news e basi). Nessuno strike escluso automaticamente: "
             "riduci la percentuale oppure usa i Pine separati 0DTE/Weekly."
         )
-    odte=profiles.get("0DTE",{"rows":[],"expiry":""})
+    is_0dte = "0DTE" in profiles
+    odte=profiles.get("0DTE", profiles.get("Principale", {"rows": [], "expiry": ""}))
     weekly=profiles.get("Weekly",{"rows":[],"expiry":""})
     # The TOP3 comes from the very SAME 0DTE rows shown by the histogram.
     # No Weekly substitution if the 0DTE profile is unavailable.
-    top_call = _top_gamma_rows(odte["rows"], "strike_index", "net_gamma",
-                               positive=True)
-    top_put = _top_gamma_rows(odte["rows"], "strike_index", "net_gamma",
-                              positive=False)
+    top_call = (_top_gamma_rows(odte["rows"], "strike_index", "net_gamma",
+                                positive=True) if is_0dte else [])
+    top_put = (_top_gamma_rows(odte["rows"], "strike_index", "net_gamma",
+                               positive=False) if is_0dte else [])
     scale, scale_step=_initial_manual_scale([(odte,100),(weekly,200)])
     scale_text=f"{scale:.8f}".rstrip("0").rstrip(".")
     scale_step_text=f"{scale_step:.8f}".rstrip("0").rstrip(".")
@@ -115,14 +116,17 @@ def make_pine(profiles: dict, basis: float, target: date, label: str,
     inputs = spx_inputs(scale_text, scale_step_text, "0DTE",
         "Valore iniziale scelto dalla fotografia NDX per rendere visibili i profili. "
         "Scala sempre MANUALE; NET GAMMA invariato.")
+    if not is_0dte:
+        inputs = inputs.replace('"Mostra 0DTE corrente"', '"Mostra profilo principale"')
+        inputs = inputs.replace('"Proietta Top 3 Call / Put 0DTE"', '"Top 3 disponibili solo per 0DTE"')
     graphics = SPX_RENDER_FUNCTIONS
     main_call = (f'renderProfile(odteLevels, odteValues, bar_index + offsetOdte, '
-                 f'"0DTE {first} · {capture_suffix}", actualScale)' if odte["rows"] else "")
+                 f'"{("0DTE" if is_0dte else "Principale")} {first} · {capture_suffix}", actualScale)' if odte["rows"] else "")
     weekly_call = (f'renderProfile(weeklyLevels, weeklyValues, bar_index + weeklyCenter, '
                    f'"Weekly {second} · {capture_suffix}", actualScale)' if weekly["rows"] else "")
     draw = spx_last_bar(
         main_call, weekly_call, "odteValues", "weeklyValues",
-        top3_levels=("topCallOdteLevels", "topPutOdteLevels") if odte["rows"] else None)
+        top3_levels=("topCallOdteLevels", "topPutOdteLevels") if is_0dte and odte["rows"] else None)
     return f'''//@version=6
 indicator("Multi-Market NET GAMMA · NDX/NQ · {target.isoformat()} · {capture_suffix} · {label}", overlay=true, max_lines_count=500, max_labels_count=35)
 // Ora acquisizione fotografia Cboe (Europe/Rome, CET/CEST): {capture["stamp"]}. Non e' l'ora Cboe originale.
