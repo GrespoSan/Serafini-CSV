@@ -26,7 +26,7 @@ def ticker_azione_da_csv(payload: bytes) -> str:
         header = payload[:16384].decode("cp1252")
     first_row = next(csv.reader(io.StringIO(header)), [])
     title = first_row[0].strip().upper() if first_row else ""
-    matches = set(re.findall(r"\\(\\s*\\^?([A-Z][A-Z0-9.\\-]{0,14})\\s*\\)", title))
+    matches = set(re.findall(r"\(\s*\^?([A-Z][A-Z0-9.\-]{0,14})\s*\)", title))
     if len(matches) != 1:
         raise InvalidCboeCSV(
             "Ticker azionario non identificabile nell'intestazione Cboe. "
