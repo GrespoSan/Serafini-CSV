@@ -680,10 +680,6 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
             if download_clock is None or download_clock > '09:00':
                 asia_c1 = None
                 asia_p1 = None
-                st.caption(
-                    'Quadro 09:00: livello 0DTE corrente successivo alle 09:00 '
-                    'o senza timestamp verificato: non usato retroattivamente.'
-                )
             st.session_state[f'asia_levels_{day.isoformat()}'] = {
                 'snapshot': choice, 'reference_spx': float(ref),
                 'basis': offset, 'c1_spx': chosen['C1']['strike_spx'],
@@ -732,3 +728,6 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
                            timestamp, current_only=True)
         st.download_button('Scarica Pine SPX · fotografia corrente', script,
                            file_name=f'SPX_NET_GAMMA_{day}.pine')
+        with st.expander('Visualizza e copia codice Pine', expanded=False):
+            st.caption('Usa l’icona Copia in alto a destra del codice per incollarlo in TradingView.')
+            st.code(script, language=None, wrap_lines=False)
