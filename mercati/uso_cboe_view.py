@@ -249,6 +249,24 @@ def render_uso_cboe():
                                data=_to_csv(p["rows"]),
                                file_name=f"USO_CBOE_{p['expiry']}_{title}.csv",
                                mime="text/csv", on_click="ignore")
+    # Come Nasdaq: comparazione facoltativa Gamma/prezzo, solo 5m chiusi.
+    # Quando non esiste un mapping M5 verificato si confronta l'ETF originale,
+    # senza fabbricare livelli sul future CL.
+    from mercati.gamma_price_compare import render_optional_compare
+    render_optional_compare(
+        label="USO / CL", key="uso",
+        yahoo_ticker="CL=F" if projected else "USO",
+        target_day=base_day,
+        groups={name: visual_groups[name] for name, group in groups.items()
+                if group.get("usable") and visual_groups[name].get("rows")},
+        strike_field="strike", gamma_field="net",
+        source_name="USO", price_name="CL" if projected else "USO",
+        price_scale=axes["price_ratio"], reference_close=reference,
+    )
+    if not projected:
+        st.caption("Confronto su USO originale: nessuna conversione "
+                   "fittizia dei livelli alle quotazioni CL.")
+
     st.caption("NET GAMMA originali delle opzioni USO; conversione grafica "
                "sul continuo CL, non Gamma delle opzioni futures.")
     with st.expander("Approfondimento · Indice di volatilità OVX", expanded=False):
