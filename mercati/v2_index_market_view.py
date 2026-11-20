@@ -284,6 +284,26 @@ def render(ticker):
     if not groups:
         st.error("Nessun profilo CBOE validato: nessun Pine generato.")
         return
+    def _show_index_pine(project_to_future):
+        from mercati.v2_universal_cboe import _pine
+        from mercati.pine_ui import render_pine_controls
+        try:
+            script = _pine(
+                ticker, groups, future_mode=project_to_future,
+                future_basis=basis if project_to_future else 0.0,
+            )
+            display = future if project_to_future else ticker
+            render_pine_controls(
+                display, script,
+                f'{ticker}_{display}_NET_GAMMA_{day.isoformat()}.pine',
+                f'{ticker.lower()}',
+            )
+            if not project_to_future:
+                st.caption(f'Pine {ticker} su strike indice originali; '
+                           f'per il future {future} serve un differenziale verificato.')
+        except (ValueError, TypeError, KeyError) as exc:
+            st.warning(f'Pine {ticker} non generato: {exc}')
+
     rows = [r for g in groups.values() for r in g["rows"]]
     from mercati.v2_gamma_summary import render_gamma_summary
     render_gamma_summary(groups.values(), net_key="net", call_key="call",
@@ -302,6 +322,7 @@ def render(ticker):
         for (name, group), column in zip(groups.items(), st.columns(len(groups))):
             column.plotly_chart(_chart(group, ticker, 1, 0, native_x, native_y, close, name),
                                 key=f"{prefix}_native_{name}_{day}")
+        _show_index_pine(project_to_future=False)
         return
     from mercati.gamma_chart_style import spx_shared_gamma_bounds
     common_x = spx_shared_gamma_bounds(groups.values(), field="net")
@@ -336,3 +357,4 @@ def render(ticker):
         file_name=f"{ticker}_{future}_levels.csv",
         mime="text/csv", key=f"{prefix}_csv",
     )
+    _show_index_pine(project_to_future=True)
