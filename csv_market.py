@@ -53,6 +53,16 @@ def render_market(upload, symbol, equity):
                 del state[key]
         state["chain_identity"] = (symbol, digest)
     if equity:
+        provenance = doc.get("_import_provenance") or {}
+        excluded = provenance.get("unsupported_contract_roots") or {}
+        if excluded:
+            details = ", ".join(f"{root}: {count}" for root, count in excluded.items())
+            st.warning(
+                f"CSV Cboe · Root=All: esclusi {provenance.get('unsupported_contracts_excluded', 0)} "
+                f"contratti di altre radici ({details}). "
+                f"Il NET GAMMA usa soltanto i contratti standard {symbol}. "
+                f"Per un CSV più pulito seleziona **Root = {symbol}** su Cboe."
+            )
         render_equity(doc, symbol, day)
         return day
     state[f"v2_archive_capture_nyday_{symbol}"] = day
