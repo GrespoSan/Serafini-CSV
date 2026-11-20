@@ -312,7 +312,8 @@ def render(ticker):
             strike_field="strike", gamma_field="net",
             source_name=ticker, price_name=future,
             price_scale=factor, price_shift=basis if basis is not None else 0.0,
-            reference_close=close, available=basis is not None,
+            reference_close=close, snapshot_doc=doc,
+            available=basis is not None,
             unavailable_reason=f"Serve un differenziale {future} verificato; "
                                "non tratto gli strike indice come livelli future.",
         )
