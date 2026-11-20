@@ -565,7 +565,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         strike_field="strike_spx", gamma_field="net_gamma",
         source_name="SPX", price_name="ES",
         price_scale=1.0, price_shift=offset if offset is not None else 0.0,
-        reference_close=ref,
+        reference_close=ref, snapshot_doc=snap,
         available=offset is not None,
         unavailable_reason="Per confrontare le candele ES serve il "
                            "differenziale ES-SPX verificato.",
