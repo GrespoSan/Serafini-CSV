@@ -1,6 +1,5 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
-import re
 import streamlit as st
 import hmac
 
@@ -30,7 +29,7 @@ if not st.session_state.get("accesso"):
         st.error("Password errata.")
     st.stop()
 st.sidebar.button("Esci", on_click=esci)
-from csv_market import MARKETS, render_market
+from csv_market import MARKETS, render_market, ticker_azione_da_csv
 from offline_snapshot import load_local_snapshot, InvalidLocalSnapshot
 from cboe_csv_import import InvalidCboeCSV, csv_coverage_warning
 from gamma_section import render
@@ -95,13 +94,14 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
     st.header("NET GAMMA · formula Serafini")
     market = st.selectbox("Mercato", list(MARKETS), key="mercato_selector")
     equity = market == "Azioni"
-    symbol = st.text_input("Ticker azione", value="AAPL").strip().upper() if equity else MARKETS[market]
-    st.subheader(f"Fotografia opzioni Cboe · {symbol}")
-    upload = st.file_uploader("Carica il CSV della catena opzioni Cboe", type=["csv"], key=f"csv_{market}_{symbol}")
+    symbol = MARKETS[market]
+    st.subheader("Fotografia opzioni Cboe" + (f" · {symbol}" if symbol else " · Azioni"))
+    upload = st.file_uploader("Carica il CSV della catena opzioni Cboe", type=["csv"], key=f"csv_{market}")
     if upload is not None:
         try:
-            if equity and not re.fullmatch(r"[A-Z][A-Z0-9.-]{0,14}", symbol):
-                raise ValueError("Ticker azione non valido.")
+            if equity:
+                symbol = ticker_azione_da_csv(upload.getvalue())
+                st.caption(f"Titolo individuato automaticamente dal CSV Cboe: **{symbol}**")
             if market == "SP500":
                 store = load_local_snapshot(upload.name, upload.getvalue())
                 warning = csv_coverage_warning(store.import_provenance)
