@@ -292,7 +292,8 @@ def render_selected_market(market_key):
         strike_field='strike_index', gamma_field='net_gamma',
         source_name='NDX', price_name='NQ',
         price_scale=1.0, price_shift=basis if basis is not None else 0.0,
-        reference_close=reference, available=basis is not None,
+        reference_close=reference, snapshot_doc=doc,
+        available=basis is not None,
         unavailable_reason='Per il confronto con le candele NQ '
                            'serve il differenziale NQ–NDX verificato.',
         toggle_key='ndx_show_candle_compare', radio_key='ndx_candle_profile',
