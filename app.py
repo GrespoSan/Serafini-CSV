@@ -60,11 +60,24 @@ st.markdown("""
     color: #55d5f6 !important;
     font-weight: 700 !important;
 }
+/* Evidenzia in rosso i due controlli Pine, senza modificare altri pulsanti. */
+.st-key-pine_download_control button,
+.st-key-pine_download_control button p,
+.st-key-pine_download_control button span {
+    color: #ff626b !important;
+    font-weight: 750 !important;
+}
+.st-key-pine_copy_container [data-testid="stExpander"] summary,
+.st-key-pine_copy_container [data-testid="stExpander"] summary p,
+.st-key-pine_copy_container [data-testid="stExpander"] summary span {
+    color: #ff626b !important;
+    font-weight: 750 !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
 
-asia_day = None
+asia_panel = None
 photo_day = None
 upload = None
 store = None
@@ -87,7 +100,7 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
                 week = store.week
                 snaps = store.list(f"{week}/snapshots/")
                 st.session_state[f"serafini_selected_snapshot_{week}"] = store.filename
-                asia_day = render(store, week, snaps, [], show_heading=False, selector_external=True)
+                asia_panel = render(store, week, snaps, [], show_heading=False, selector_external=True)
             else:
                 photo_day = render_market(upload, symbol, equity)
         except (InvalidLocalSnapshot, InvalidCboeCSV, ValueError) as exc:
@@ -135,8 +148,11 @@ with st.expander("ANALISI DEL CONTESTO — News · Volatilità · Trend Daily", 
 
     # Il Quadro Asia segue il Trend Daily ed è interno all'Analisi del contesto.
     # È disponibile soltanto con una fotografia SPX; nessun dato sintetico.
-    if asia_day is not None:
+    if asia_panel is not None:
         st.divider()
         st.subheader("QUADRO OPERATIVO — ORE 09:00")
         from asia_gamma import render_auto as render_asia_gamma
-        render_asia_gamma(asia_day)
+        render_asia_gamma(
+            asia_panel['day'], asia_panel['c1_es'], asia_panel['p1_es'],
+            level_context=asia_panel['level_context'],
+        )
