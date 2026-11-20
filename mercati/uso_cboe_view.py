@@ -256,6 +256,45 @@ def render_uso_cboe():
                    "delle opzioni USO. Non modifica i Gamma o gli strike dell'ETF.")
         st.link_button("Consulta OVX sul sito Cboe",
                        "https://www.cboe.com/us/indices/dashboard/ovx/")
+
+    # Pine sullo stesso set di strike Cboe dei grafici; la proiezione future
+    # e' consentita solo se il mapping M5 ETF/future e' stato verificato.
+    from mercati.v2_universal_cboe import _pine as make_etf_pine
+    from mercati.pine_ui import render_pine_controls
+    usable_original = {title: group for title, group in groups.items()
+                       if group.get('usable') and group.get('rows')}
+    usable_visual = {title: visual_groups[title] for title in usable_original}
+    enlarged_count = sum(len(group['rows']) for group in usable_visual.values())
+    selected = (usable_visual if show_extension and enlarged_count <= 480
+                else usable_original)
+    if show_extension and enlarged_count > 480:
+        st.caption('Estensione grafica oltre 480 strike: il Pine utilizza '
+                   'soltanto i profili originali, senza tagliare livelli.')
+    try:
+        pine_groups = {
+            title: dict(group, expiry=date.fromisoformat(str(group['expiry'])))
+            for title, group in selected.items()
+        }
+        pine = make_etf_pine(
+            "USO", pine_groups, future_mode=projected,
+            future_ratio=axes['price_ratio'] if projected else None,
+        )
+        pine_market = "CL / MCL" if projected else "USO"
+        render_pine_controls(
+            pine_market, pine,
+            f'USO_NET_GAMMA_{base_day.isoformat()}.pine',
+            'uso',
+        )
+        if projected:
+            st.caption('Pine USO proiettato sul continuo CL / MCL. '
+                       'Sono strike delle opzioni ETF, non opzioni sul future; '
+                       'ricontrolla il rapporto di conversione al rollover.')
+        else:
+            st.caption('Pine su strike USO originali: conversione '
+                       'CL / MCL non verificata, nessun livello future simulato.')
+    except (ValueError, KeyError, TypeError) as exc:
+        st.warning(f'Pine USO non generato: {exc}')
+
     # Keep 4-argument call compatible with a previous module during Streamlit hot reload.
     # The current exporter reads source SHA and Cboe timestamp from session state.
     st.session_state["uso_cboe_timestamp"] = stamp
