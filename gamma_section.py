@@ -726,8 +726,11 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
             groups[k] = dict(computed_profiles[k], display_rows=visual_profiles[k]['rows'])
         script = make_pine(groups['0DTE'], groups['Weekly'], offset, day.isoformat(),
                            timestamp, current_only=True)
-        st.download_button('Scarica Pine SPX · fotografia corrente', script,
-                           file_name=f'SPX_NET_GAMMA_{day}.pine')
-        with st.expander('Visualizza e copia codice Pine', expanded=False):
-            st.caption('Usa l’icona Copia in alto a destra del codice per incollarlo in TradingView.')
-            st.code(script, language=None, wrap_lines=False)
+        pine_download_col, pine_copy_col = st.columns(2, gap='small')
+        with pine_download_col:
+            st.download_button('Scarica Pine SPX · fotografia corrente', script,
+                               file_name=f'SPX_NET_GAMMA_{day}.pine')
+        with pine_copy_col:
+            with st.expander('Visualizza e copia codice Pine', expanded=False):
+                st.caption('Usa l’icona Copia in alto a destra del codice per incollarlo in TradingView.')
+                st.code(script, language=None, wrap_lines=False)
