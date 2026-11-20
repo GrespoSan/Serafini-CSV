@@ -589,16 +589,33 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
 - Cambiano i volumi e le posizioni presenti sulle opzioni.
         """)
 
+    # Il laboratorio resta indipendente; il Quadro usa soltanto C1/P1
+    # selezionati da una fotografia acquisita e verificata entro le 09:00.
+    asia_c1 = None
+    asia_p1 = None
+    asia_level_context = None
     if candidate_0dte is not None:
         from option_structure_lab import render_lab
         snapshot_description = (
             'Ultimo rilevamento' if choice == names[0] else acquisition_label
         )
-        # Conserva il laboratorio Cboe indipendente dal Quadro Asia.
-        render_lab(
+        chosen = render_lab(
             candidate_0dte, computed_profiles.get('0DTE'), offset,
             day, choice, ref, snapshot_description, download_clock,
         )
+        if (chosen and offset is not None and math.isfinite(offset)
+                and download_clock is not None and download_clock <= '09:00'):
+            asia_c1 = chosen['C1']['strike_spx'] + offset
+            asia_p1 = chosen['P1']['strike_spx'] + offset
+            asia_level_context = (
+                'C1/P1 selezionati nello snapshot acquisito entro le 09:00 Roma. '
+                'Metodo sperimentale; non costituisce conferma dei veri livelli Serafini.'
+            )
+
+    asia_panel = {
+        'day': day, 'c1_es': asia_c1, 'p1_es': asia_p1,
+        'level_context': asia_level_context,
+    }
 
     if offset is not None and all(computed_profiles.get(k, {}).get('rows') for k in ('0DTE', 'Weekly')):
         from pine_export import make_pine
@@ -610,10 +627,12 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
         pine_download_col, pine_copy_col = st.columns(2, gap='small')
         with pine_download_col:
             st.download_button('Scarica Pine SPX · fotografia corrente', script,
-                               file_name=f'SPX_NET_GAMMA_{day}.pine')
+                               file_name=f'SPX_NET_GAMMA_{day}.pine',
+                               key='pine_download_control')
         with pine_copy_col:
-            with st.expander('Visualizza e copia codice Pine', expanded=False):
-                st.caption('Usa l’icona Copia in alto a destra del codice per incollarlo in TradingView.')
-                st.code(script, language=None, wrap_lines=False)
+            with st.container(key='pine_copy_container'):
+                with st.expander('Visualizza e copia codice Pine', expanded=False):
+                    st.caption('Usa l’icona Copia in alto a destra del codice per incollarlo in TradingView.')
+                    st.code(script, language=None, wrap_lines=False)
 
-    return day
+    return asia_panel
