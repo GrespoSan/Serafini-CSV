@@ -114,10 +114,33 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
             if equity:
                 symbol = ticker_azione_da_csv(upload.getvalue())
                 st.caption(f"Titolo individuato automaticamente dal CSV Cboe: **{symbol}**")
+            # Il GEX usa lo STESSO CSV del NET GAMMA, in automatico.
+            # Si esegue prima della costruzione del Pine, con cache per file/IV.
+            # Qualsiasi errore GEX non blocca il NET GAMMA Serafini.
+            csv_bytes = upload.getvalue()
+            csv_sha256 = hashlib.sha256(csv_bytes).hexdigest()
             st.session_state['csv_gex_current_source'] = {
-                'sha256': hashlib.sha256(upload.getvalue()).hexdigest(),
-                'symbol': symbol,
+                'sha256': csv_sha256, 'symbol': symbol,
             }
+            from csv_gex_panel import _cached_gex
+            from csv_gex_pine import MODE_BY_LABEL
+            iv_label = st.session_state.get(
+                'csv_gex_iv_units',
+                'Rilevamento automatico (blocco se IV ambigua)',
+            )
+            iv_mode = MODE_BY_LABEL.get(iv_label, 'auto')
+            st.session_state['csv_gex_last_report'] = None
+            st.session_state['csv_gex_last_error'] = None
+            try:
+                gex_report = _cached_gex(csv_bytes, symbol, iv_mode)
+                st.session_state['csv_gex_last_report'] = (
+                    (csv_sha256, symbol, iv_mode), gex_report,
+                )
+            except Exception as exc:
+                # Il codice del NET GAMMA non dipende dal modello GEX.
+                st.session_state['csv_gex_last_error'] = (
+                    type(exc).__name__ + ': ' + str(exc)[:250]
+                )
             if market == "SP500":
                 store = load_local_snapshot(upload.name, upload.getvalue())
                 warning = csv_coverage_warning(store.import_provenance)
