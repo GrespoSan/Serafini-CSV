@@ -225,6 +225,8 @@ def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto") -> dict:
     captured = datetime.strptime(
         doc["timestamp"], "%Y-%m-%d %H:%M:%S"
     ).replace(tzinfo=UTC)
+    if captured > datetime.now(UTC) + timedelta(minutes=5):
+        raise ValueError("CSV con data futura: fotografia non verificabile.")
     spot = float(doc["data"]["current_price"])
     if not math.isfinite(spot) or spot <= 0:
         raise ValueError("Prezzo Cboe mancante o non valido.")
