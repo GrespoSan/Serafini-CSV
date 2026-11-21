@@ -286,7 +286,8 @@ def render_uso_cboe():
         render_pine_controls(
             pine_market, pine,
             f'USO_NET_GAMMA_{base_day.isoformat()}.pine',
-            'uso',
+            'uso', source_ticker='USO',
+            price_factor=axes['price_ratio'] if projected else 1.0,
         )
         if projected:
             st.caption('Pine USO proiettato sul continuo CL / MCL. '
