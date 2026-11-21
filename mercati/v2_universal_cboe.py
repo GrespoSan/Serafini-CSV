@@ -443,6 +443,7 @@ def render_equity(doc, ticker, now):
         from mercati.pine_ui import render_pine_controls
         render_pine_controls(
             ticker, pine, f"{ticker}_NET_GAMMA_CBOE.pine", "equity",
+            source_ticker=ticker,
         )
         st.caption("Pine statico: strike originali sul grafico del solo ticker inserito. "
                    "Non contiene conversioni né aggiornamento automatico.")
