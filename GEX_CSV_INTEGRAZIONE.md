@@ -8,7 +8,7 @@ Il calcolo matematico proviene dal motore testato in GrespoSan/SPX-Edge-GEX-Lab:
 - gexlab/engine/gex.py (blob 156713de1d593fb8ea38e3a7a8aae2ad5a1a361d)
 - gexlab/engine/bsm.py (blob 88e59096ecece2d4b98beab464cef35500f125b9)
 - gexlab/engine/calendar.py (blob 1d86cbff0e7481716b07e57fd6b8a3ebf28d1fe0)
-- gexlab/models.py (blob da verificare nel modulo csv_gex_core/models.py)
+- gexlab/models.py (blob b60e5bb6c392212871dfad678b993f94b45ad253)
 
 Sono incorporati **solo i moduli matematici puri**, con import locali in csv_gex_core. Restano fuori credenziali, client REST, cache condivise, storage, scheduler e comandi di trading. Non è richiesto aprire l'altra app.
 
