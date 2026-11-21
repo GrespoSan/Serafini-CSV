@@ -321,7 +321,8 @@ def render_selected_market(market_key):
             )
             render_pine_controls(
                 'NQ / MNQ', script, f'NDX_NQ_NET_GAMMA_{day.isoformat()}.pine',
-                'ndx',
+                'ndx', source_ticker='NDX',
+                price_factor=1.0, price_shift=basis,
             )
         except (ValueError, KeyError, TypeError) as exc:
             st.warning(f'Pine NQ/MNQ non generato: {exc}')
