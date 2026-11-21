@@ -43,6 +43,42 @@ Il calendario XNYS è un **proxy di sessione**, non il settlement ufficiale OCC;
 
 L'elaborazione non parte in automatico quando l'expander è chiuso. Il risultato è riutilizzato per lo stesso SHA256, simbolo e formato IV; cambiando file non si mostra il vecchio risultato.
 
+## Pine Script: integrazione opzionale nel NET GAMMA esistente
+
+Il modulo **csv_gex_pine.py** aggiunge al Pine NET GAMMA corrente solo i
+livelli GEX modellati che hanno superato le verifiche diagnostiche. Non
+modifica le formule e non riscrive il grafico NET GAMMA.
+
+Procedura:
+
+1. Caricare il CSV originale nel mercato desiderato.
+2. Nella sezione **ANALISI GEX**, selezionare il formato IV corretto e usare
+   **Calcola GEX dalla fotografia CSV**.
+3. Ritornare ai controlli Pine del mercato e attivare
+   **Mostra livelli GEX nel Pine (0DTE / Weekly)** (OFF di default).
+4. Scaricare o copiare il Pine: entrambi i comandi restituiscono lo stesso codice.
+5. Nelle impostazioni TradingView, abilitare separatamente GEX 0DTE e Weekly.
+   Per default il 0DTE è ON se valido, Weekly OFF.
+
+Le nuove linee GEX sono verdi (Call Wall), rosse (Put Wall) e gialle
+(Gamma Flip). 0DTE ha linea piena e Weekly tratteggiata.
+Ogni linea è un livello **statico** della fotografia e non si aggiorna alle
+candele future; la curva scenari resta nel modulo Streamlit.
+
+Il codice viene aggiunto solo se coincidenti **SHA-256 del CSV, ticker e
+unità IV**. Se la scadenza è incompleta, quel gruppo GEX resta N/D e
+non entra nel Pine. Per esportare sui futures sono riutilizzati
+esclusivamente i mapping già verificati dalle funzioni NET GAMMA:
+ES=SPX+basis; NQ=NDX+basis; RTY=RUT+basis;
+YM=DJX×100+basis; GC=GLD×ratio; CL=USO×ratio.
+Senza conversione valida, i livelli restano in scala indice/ETF nei Pine
+che già permettono quell'opzione. L'export non acquisisce nulla da Alpaca.
+
+Test: **tests/test_csv_gex_pine.py**, compresi mismatch fonte/IV, assenza
+Gamma Flip, scadenza mancante, rapporti di proiezione e integrità del
+codice NET GAMMA. La verifica automatica non equivale a una compilazione
+nel Pine Editor di TradingView.
+
 ## Test e gestione futura
 
 Workflow: .github/workflows/csv-gex-tests.yml. Test: tests/test_csv_gex_integration.py. Comprende golden Gamma/GEX, indipendenza 0DTE/Weekly, IV/OI mancanti e IV ambiguo, no-lookahead e fonte. Include il test preesistente del filtro radici Azioni.
