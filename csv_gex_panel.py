@@ -98,6 +98,9 @@ def render(payload: bytes | None, symbol: str | None) -> None:
             with st.spinner("Controllo contratti, IV, OI e calcolo GEX..."):
                 result = _cached_gex(payload, symbol, mode)
             st.session_state[key] = (signature, result)
+            # Ricalcola le sezioni Pine che vengono renderizzate PRIMA del pannello GEX.
+            # Nessun secondo calcolo GEX: il report resta in session_state/cache.
+            st.rerun()
         except (ValueError, KeyError, TypeError, OverflowError, OSError) as exc:
             st.session_state.pop(key, None)
             st.error("GEX non calcolabile: " + str(exc)[:260])
