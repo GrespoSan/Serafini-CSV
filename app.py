@@ -125,6 +125,16 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
         except (InvalidLocalSnapshot, InvalidCboeCSV, ValueError) as exc:
             st.error(str(exc))
 
+# Modulo rigorosamente isolato: usa solo il CSV caricato, nessun archivio remoto.
+# Un'eventuale indisponibilita' del GEX non deve bloccare il NET GAMMA.
+with st.expander("ANALISI GEX · Edge-style da CSV — modulo indipendente", expanded=False):
+    try:
+        from csv_gex_panel import render as render_csv_gex
+        render_csv_gex(upload.getvalue() if upload is not None else None, symbol)
+    except Exception as exc:
+        st.error("Modulo GEX separato non disponibile: " + type(exc).__name__ +
+                 ". Le analisi NET GAMMA precedenti restano utilizzabili.")
+
 with st.expander("ANALISI DEL CONTESTO — News · Volatilità · Trend Daily", expanded=False):
     iso = (photo_day or datetime.now(ZoneInfo("Europe/Rome")).date()).isocalendar()
     week_label = store.week if store else f"{iso.year}-W{iso.week:02d}"
