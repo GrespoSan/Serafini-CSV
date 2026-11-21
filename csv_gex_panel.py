@@ -87,28 +87,28 @@ def render(payload: bytes | None, symbol: str | None) -> None:
         "IV decimale · 0,20 = 20%": "decimal",
         "IV percentuale · 20 = 20%": "percent",
     }
-    choice = st.selectbox("Unità della volatilità implicita nel CSV",
-                          list(labels), key="csv_gex_iv_units")
+    choice = st.selectbox(
+        "Unità della volatilità implicita nel CSV",
+        list(labels), key="csv_gex_iv_units",
+        help="Rilevamento automatico predefinito. Se l'unità IV è ambigua, "
+             "è possibile correggerla qui: l'app ricalcola da sola al cambio.",
+    )
     mode = labels[choice]
     signature = (digest, symbol, mode)
-    key = "csv_gex_last_report"
-    if st.button("Calcola GEX dalla fotografia CSV", key="csv_gex_calculate",
-                 help="Nessuna chiamata Alpaca, nessun collegamento ad altre app."):
-        try:
-            with st.spinner("Controllo contratti, IV, OI e calcolo GEX..."):
-                result = _cached_gex(payload, symbol, mode)
-            st.session_state[key] = (signature, result)
-            # Ricalcola le sezioni Pine che vengono renderizzate PRIMA del pannello GEX.
-            # Nessun secondo calcolo GEX: il report resta in session_state/cache.
-            st.rerun()
-        except (ValueError, KeyError, TypeError, OverflowError, OSError) as exc:
-            st.session_state.pop(key, None)
-            st.error("GEX non calcolabile: " + str(exc)[:260])
-    saved = st.session_state.get(key)
+    # Il report è stato preparato automaticamente prima dei Pine.
+    # Qui si visualizza soltanto: nessun pulsante, rerun o secondo download.
+    saved = st.session_state.get("csv_gex_last_report")
     if not saved or saved[0] != signature:
-        st.caption("GEX non ancora calcolato per questa fotografia e unità IV.")
+        error = st.session_state.get("csv_gex_last_error")
+        if error:
+            st.warning("GEX non calcolabile da questo CSV: " + error)
+        else:
+            st.info("GEX non disponibile per la fotografia selezionata. "
+                    "Il NET GAMMA e il relativo Pine restano utilizzabili.")
         return
     info = saved[1]
+    st.caption("**Calcolo automatico:** un solo CSV alimenta NET GAMMA e GEX. "
+               "Il Pine include i livelli GEX quando superano i controlli di qualità.")
     st.caption(
         f"**Fonte:** CSV Cboe caricato · **Acquisizione originale:** "
         f"{info['timestamp_rome']} Roma · **Modello:** {MODEL_LABEL} · "
