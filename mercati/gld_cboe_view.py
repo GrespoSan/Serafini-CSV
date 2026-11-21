@@ -284,7 +284,8 @@ def render_gld_cboe():
         render_pine_controls(
             pine_market, pine,
             f'GLD_NET_GAMMA_{base_day.isoformat()}.pine',
-            'gld',
+            'gld', source_ticker='GLD',
+            price_factor=axes['price_ratio'] if projected else 1.0,
         )
         if projected:
             st.caption('Pine GLD proiettato sul continuo GC / MGC. '
