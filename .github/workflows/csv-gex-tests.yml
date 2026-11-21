@@ -19,6 +19,7 @@ on:
       - cboe_csv_import.py
       - tests/test_csv_gex_integration.py
       - tests/test_csv_gex_pine.py
+      - tests/test_csv_gex_automatic_flow.py
       - .github/workflows/csv-gex-tests.yml
   workflow_dispatch:
 
@@ -42,5 +43,7 @@ jobs:
         run: python -m unittest discover -s tests -p test_csv_gex_integration.py -v
       - name: Pine GEX controls, source identity, no data fabrication and price conversion
         run: python -m unittest discover -s tests -p test_csv_gex_pine.py -v
+      - name: Single CSV automatic GEX and Pine integration
+        run: python -m unittest discover -s tests -p test_csv_gex_automatic_flow.py -v
       - name: Pre-existing root-filter regression
         run: python -m unittest discover -s tests -p test_csv_root_filter.py -v
