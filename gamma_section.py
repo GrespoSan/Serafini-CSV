@@ -639,6 +639,12 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
             groups[k] = dict(computed_profiles[k], display_rows=visual_profiles[k]['rows'])
         script = make_pine(groups['0DTE'], groups['Weekly'], offset, day.isoformat(),
                            timestamp, current_only=True)
+        # I calcoli NET GAMMA restano invariati: solo overlay GEX opzionale.
+        from mercati.pine_ui import prepare_pine_with_csv_gex
+        script = prepare_pine_with_csv_gex(
+            script, 'spx', source_ticker='SPX',
+            price_factor=1.0, price_shift=offset,
+        )
         pine_download_col, pine_copy_col = st.columns(2, gap='small')
         with pine_download_col:
             st.download_button('Scarica Pine SPX · fotografia corrente', script,
