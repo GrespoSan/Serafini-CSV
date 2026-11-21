@@ -116,6 +116,28 @@ class GEXCSVTests(unittest.TestCase):
         grid = np.array([90.0, 95.0, 100.0, 105.0, 110.0])
         self.assertEqual(zero_crossings(grid, np.ones(5)), [])
 
+    def test_spx_occ_weekly_roots_use_same_engine(self):
+        source = fixture()
+        source = source.replace(b"NVIDIA CORPORATION (NVDA)",
+                                b"S&P 500 INDEX (^SPX)").replace(b"NVDA", b"SPXW")
+        result = analyze_csv_gex(source, "SPX")
+        self.assertEqual(result["reports"]["0DTE"]["status"], "DIAGNOSTICO")
+        self.assertEqual(result["reports"]["Weekly"]["status"], "DIAGNOSTICO")
+        self.assertEqual(result["reports"]["0DTE"]["expiry"], "2026-11-20")
+
+    def test_after_market_close_does_not_backfill_expired_0dte(self):
+        source = fixture().replace(b"9:00 AM EST", b"5:00 PM EST")
+        result = analyze_csv_gex(source, "NVDA")
+        self.assertEqual(result["reports"]["0DTE"]["expiry"], "2026-11-23")
+        self.assertEqual(result["reports"]["0DTE"]["status"], "INSUFFICIENTE")
+        self.assertIsNone(result["reports"]["0DTE"]["call_wall"])
+        self.assertEqual(result["reports"]["Weekly"]["expiry"], "2026-11-27")
+
+    def test_future_forged_csv_time_refused(self):
+        source = fixture().replace(b"November 20, 2026", b"November 20, 2099")
+        with self.assertRaisesRegex(ValueError, "data futura"):
+            analyze_csv_gex(source, "NVDA")
+
     def test_wrong_symbol_rejected_by_existing_parser(self):
         from cboe_csv_import import InvalidCboeCSV
         with self.assertRaises(InvalidCboeCSV):
