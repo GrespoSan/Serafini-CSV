@@ -294,7 +294,9 @@ def render(ticker):
             render_pine_controls(
                 display, script,
                 f'{ticker}_{display}_NET_GAMMA_{day.isoformat()}.pine',
-                f'{ticker.lower()}',
+                f'{ticker.lower()}', source_ticker=ticker,
+                price_factor=factor if project_to_future else 1.0,
+                price_shift=basis if project_to_future else 0.0,
             )
             if not project_to_future:
                 st.caption(f'Pine {ticker} su strike indice originali; '
