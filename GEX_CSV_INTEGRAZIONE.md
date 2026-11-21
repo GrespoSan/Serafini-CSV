@@ -34,31 +34,33 @@ Per la visualizzazione diagnostica richiediamo almeno 20 contratti eleggibili, c
 
 Il calendario XNYS è un **proxy di sessione**, non il settlement ufficiale OCC; le radici indice standard sono interpretate AM e le settimanali PM. In assenza di scadenze realmente nel CSV non generiamo livelli.
 
-## Interfaccia
+## Interfaccia e calcolo automatico
 
-1. In **ANALISI NET GAMMA**, selezionare mercato e caricare il CSV originale.
-2. Aprire **ANALISI GEX · Edge-style da CSV — modulo indipendente**.
-3. Confermare le unità IV se non riconoscibili in modo univoco e premere **Calcola GEX dalla fotografia CSV**.
-4. Selezionare 0DTE oppure Weekly. Con qualità insufficiente la schermata mostra N/D.
+1. In **ANALISI NET GAMMA**, scegliere il mercato e caricare un unico CSV Cboe.
+2. Prima della generazione del Pine, l'app calcola automaticamente NET GAMMA
+   e, separatamente, GEX dal medesimo file; il modello GEX usa una cache
+   vincolata ai byte CSV, simbolo e unità IV.
+3. **Scarica Pine** o **Visualizza e copia codice Pine** forniscono
+   automaticamente il NET GAMMA e i livelli GEX diagnostici disponibili.
+   Non ci sono più il pulsante Calcola GEX né il toggle prima dell'esportazione.
+4. La sezione **ANALISI GEX** è solo un pannello di lettura di report,
+   curva, scadenze e qualità, indipendente dalla sua apertura.
+5. Il formato IV è rilevato automaticamente di default. Soltanto in caso
+   di IV ambigua è possibile selezionare decimale o percentuale nella
+   sezione GEX: il ricalcolo e il Pine si aggiornano al rerun senza pulsanti.
 
-L'elaborazione non parte in automatico quando l'expander è chiuso. Il risultato è riutilizzato per lo stesso SHA256, simbolo e formato IV; cambiando file non si mostra il vecchio risultato.
+Se GEX è insufficiente o fallisce il calcolo, il NET GAMMA originale e
+il suo Pine continuano a funzionare **senza alcun livello GEX inventato**.
+Per 0DTE e Weekly i controlli di qualità sono indipendenti; il Pine
+contiene i soli gruppi validi.
 
-## Pine Script: integrazione opzionale nel NET GAMMA esistente
+## Pine Script: GEX automatico nel NET GAMMA esistente
 
-Il modulo **csv_gex_pine.py** aggiunge al Pine NET GAMMA corrente solo i
-livelli GEX modellati che hanno superato le verifiche diagnostiche. Non
-modifica le formule e non riscrive il grafico NET GAMMA.
-
-Procedura:
-
-1. Caricare il CSV originale nel mercato desiderato.
-2. Nella sezione **ANALISI GEX**, selezionare il formato IV corretto e usare
-   **Calcola GEX dalla fotografia CSV**.
-3. Ritornare ai controlli Pine del mercato e attivare
-   **Mostra livelli GEX nel Pine (0DTE / Weekly)** (OFF di default).
-4. Scaricare o copiare il Pine: entrambi i comandi restituiscono lo stesso codice.
-5. Nelle impostazioni TradingView, abilitare separatamente GEX 0DTE e Weekly.
-   Per default il 0DTE è ON se valido, Weekly OFF.
+Il modulo **csv_gex_pine.py** aggiunge in fondo al Pine originale esclusivamente
+i livelli GEX modellati che hanno superato i controlli. Il prefisso
+del codice NET GAMMA e le sue formule non vengono modificati.
+L'attivazione grafica delle scadenze avviene **solo nelle impostazioni
+TradingView**: GEX 0DTE ON e Weekly OFF di default, modificabili.
 
 Le nuove linee GEX sono verdi (Call Wall), rosse (Put Wall) e gialle
 (Gamma Flip). 0DTE ha linea piena e Weekly tratteggiata.
@@ -74,7 +76,7 @@ YM=DJX×100+basis; GC=GLD×ratio; CL=USO×ratio.
 Senza conversione valida, i livelli restano in scala indice/ETF nei Pine
 che già permettono quell'opzione. L'export non acquisisce nulla da Alpaca.
 
-Test: **tests/test_csv_gex_pine.py**, compresi mismatch fonte/IV, assenza
+Test: **tests/test_csv_gex_pine.py** e **tests/test_csv_gex_automatic_flow.py**, compresi mismatch fonte/IV, assenza
 Gamma Flip, scadenza mancante, rapporti di proiezione e integrità del
 codice NET GAMMA. La verifica automatica non equivale a una compilazione
 nel Pine Editor di TradingView.
