@@ -2,6 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 import streamlit as st
 import hmac
+import hashlib
 
 st.set_page_config(page_title="Serafini · Analisi CSV", page_icon="📊", layout="wide")
 
@@ -90,6 +91,8 @@ asia_panel = None
 photo_day = None
 upload = None
 store = None
+# L'export GEX Pine non puo' riusare report di un file caricato in precedenza.
+st.session_state['csv_gex_current_source'] = None
 with st.expander("ANALISI NET GAMMA", expanded=True):
     st.header("NET GAMMA · formula Serafini")
     market = st.selectbox("Mercato", list(MARKETS), key="mercato_selector")
@@ -111,6 +114,10 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
             if equity:
                 symbol = ticker_azione_da_csv(upload.getvalue())
                 st.caption(f"Titolo individuato automaticamente dal CSV Cboe: **{symbol}**")
+            st.session_state['csv_gex_current_source'] = {
+                'sha256': hashlib.sha256(upload.getvalue()).hexdigest(),
+                'symbol': symbol,
+            }
             if market == "SP500":
                 store = load_local_snapshot(upload.name, upload.getvalue())
                 warning = csv_coverage_warning(store.import_provenance)
