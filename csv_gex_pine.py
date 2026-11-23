@@ -27,10 +27,17 @@ def validate_result(saved, source, mode):
     if not isinstance(saved, tuple) or len(saved) != 2:
         raise ValueError("Calcolare prima GEX dalla stessa fotografia CSV.")
     signature, report = saved
-    if (signature != (source["sha256"], source["symbol"], mode)
+    # Legacy 3-part keys remain valid for existing CSV-only workflows.
+    # New 4-part keys additionally bind the OCC/CSV source selection.
+    oi_mode = source.get("oi_mode", "csv")
+    expected = ((source["sha256"], source["symbol"], mode)
+                if len(signature) == 3 and oi_mode == "csv"
+                else (source["sha256"], source["symbol"], mode, oi_mode))
+    if (signature != expected
             or not isinstance(report, dict)
             or report.get("sha256") != source["sha256"]
-            or report.get("symbol") != source["symbol"]):
+            or report.get("symbol") != source["symbol"]
+            or (report.get("oi_info") or {}).get("requested_mode",oi_mode) != oi_mode):
         raise ValueError("Risultato GEX non riferito al CSV/mercato/IV corrente: ricalcolare.")
     if report.get("source") != "CBOE_CSV_MANUAL_USER_EXPORT":
         raise ValueError("GEX non proveniente da questa fotografia CSV Cboe.")
@@ -82,6 +89,11 @@ def append_csv_gex(code: str, report: dict, groups: dict, *,
     stamp = str(report.get("timestamp_rome", "sconosciuto"))
     if not re.fullmatch(r"\d\d/\d\d/\d{4} \d\d:\d\d:\d\d", stamp):
         raise ValueError("Timestamp sorgente GEX non verificabile.")
+    oi_info = report.get("oi_info") or {}
+    oi_source = oi_info.get("effective_source", "CSV_CBOE")
+    oi_caption = ("OCC Series Search · data OI NON pubblicata"
+                  if oi_source == "OCC_SERIES_SEARCH"
+                  else "CSV Cboe · data OI NON documentata")
     source_sha = str(report.get("sha256", ""))
     if not re.fullmatch(r"[a-f0-9]{64}", source_sha):
         raise ValueError("Impronta SHA-256 sorgente GEX assente.")
@@ -89,6 +101,7 @@ def append_csv_gex(code: str, report: dict, groups: dict, *,
         "",
         "// INIZIO CSV-GEX-OVERLAY: GEX modellato, distinto dal NET GAMMA Serafini.",
         f"// Fonte: CBOE CSV manuale, SHA256 {source_sha[:16]}; {stamp} Europe/Rome.",
+        f"// Fonte OI GEX: {oi_caption}. Non certificata; modello diagnostico.",
         "// Modello: Black-Scholes, OI (NO volume), Call + / Put -, USD per movimento spot dell'1%.",
         "// OI/IV non datati singolarmente: SOLO DIAGNOSTICO, non livelli operativi certificati.",
         "// I livelli sono STATICI alla fotografia; non vengono ricalcolati su TradingView.",
