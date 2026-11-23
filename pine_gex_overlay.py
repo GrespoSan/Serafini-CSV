@@ -35,7 +35,7 @@ def append_gex_overlays(code, levels, offset):
 // Questo indicatore NON scarica opzioni live e non ricalcola Wall/Flip.
 // Un livello non verificato resta na, mai ricavato da un altro rilevamento.
 gexGroup = "GEX Edge 0DTE — livelli"
-showGexLevels = input.bool(true, "Mostra Call Wall / Put Wall / Gamma Flip", group=gexGroup)
+showGexLevels = input.bool(false, "Mostra Call Wall / Put Wall / Gamma Flip", group=gexGroup)
 gexCallColor = input.color(color.rgb(120, 220, 35), "Call Wall", group=gexGroup, inline="cw")
 gexCallWidth = input.int(2, "Spessore", minval=1, maxval=5, group=gexGroup, inline="cw")
 gexPutColor = input.color(color.rgb(150, 40, 230), "Put Wall", group=gexGroup, inline="pw")
