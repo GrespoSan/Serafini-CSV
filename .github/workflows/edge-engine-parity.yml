@@ -1,0 +1,39 @@
+name: Serafini CSV - original Edge same-input GEX parity
+
+on:
+  pull_request:
+    paths:
+      - 'csv_gex_core/**'
+      - 'tests/test_edge_original_same_inputs.py'
+      - '.github/workflows/edge-engine-parity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  original-edge-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout Serafini CSV
+        uses: actions/checkout@v4
+        with:
+          path: serafini-csv
+      - name: Checkout pinned original Edge GEX Lab (read-only)
+        uses: actions/checkout@v4
+        with:
+          repository: GrespoSan/SPX-Edge-GEX-Lab
+          ref: e6df9754a3da1e0924d9c146cfd80020030e31ab
+          path: edge-reference
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pure mathematical dependencies only
+        run: python -m pip install 'numpy>=2,<3'
+      - name: Compare ORIGINAL Edge and CSV identical inputs at 0DTE and Weekly
+        working-directory: serafini-csv
+        env:
+          EDGE_GEX_REFERENCE_PATH: ../edge-reference
+        run: python -m unittest discover -s tests -p test_edge_original_same_inputs.py -v
