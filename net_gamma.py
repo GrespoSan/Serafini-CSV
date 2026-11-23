@@ -79,96 +79,160 @@ def profile(snapshot: dict, expiry: date, reference: float, strike_count: int = 
 
 
 def visual_profile(snapshot: dict, base: dict, expiry: date, reference: float,
-                   spot=None, buffer_pct: float = 0.025, max_strikes: int = 140):
-    """Estensione solo grafica: conserva 25+25 originali e NET GAMMA identici.
+                   spot=None, buffer_pct: float = 0.05, max_strikes: int = 200,
+                   known_low=None, known_high=None):
+    """Estensione grafica *soltanto* da strike Cboe reali della stessa fotografia.
 
-    Seleziona dalla STESSA catena Cboe soltanto strike ulteriori oltre i
-    due estremi dei 50 originali. Il margine ±2,5% dal prezzo Cboe fotografato
-    non è un prezzo live; lo storico non viene alterato o ricostruito.
-    Cap di 140 righe/profilo per Pine comparativo a tre profili (max 500 linee).
+    Il nucleo Serafini 25+25 non cambia mai. La fascia obiettivo usa solo
+    chiusura precedente, prezzo nello snapshot e, se forniti e verificati,
+    estremi di una sessione gia' conclusa. Nessuna candela successiva.
+    Il limite di 200 per 0DTE e Weekly lascia margine alle linee GEX/Pine
+    entro il limite massimo di 500 linee TradingView.
     """
     from math import isfinite
+
     core = list(base.get("rows") or [])
-    if len(core) != 50 or len({float(r["strike_spx"]) for r in core}) != 50:
-        raise ValueError("L'estensione richiede 25+25 strike Serafini validi")
-    if not (isfinite(float(reference)) and reference > 0):
+    core_strikes = {float(r["strike_spx"]) for r in core}
+    if len(core) != 50 or len(core_strikes) != 50:
+        raise ValueError("L'estensione richiede i 50 strike Serafini 25+25 invariati")
+    if not isfinite(float(reference)) or reference <= 0:
         raise ValueError("Riferimento SPX non valido")
-    if not (0 < float(buffer_pct) <= 0.1 and 50 <= max_strikes <= 140):
-        raise ValueError("Estensione: parametri di copertura non validi")
+    if not (0 < float(buffer_pct) <= .10 and 50 <= max_strikes <= 200):
+        raise ValueError("Estensione: fascia o massimo strike non consentito")
+
     try:
         spot_value = float(spot)
         if not isfinite(spot_value) or spot_value <= 0:
             spot_value = float(reference)
     except (ValueError, TypeError, OverflowError):
         spot_value = float(reference)
-    baseline_min = min(float(r["strike_spx"]) for r in core)
-    baseline_max = max(float(r["strike_spx"]) for r in core)
-    requested_low = spot_value - float(buffer_pct) * reference
-    requested_high = spot_value + float(buffer_pct) * reference
-    core_strikes = {float(r["strike_spx"]) for r in core}
-    # Non estendere verso il lato gia' coperto. Non usare prezzi futuri:
-    # focus e margine sono congelati nel momento del rilevamento Cboe.
-    side_low = requested_low < baseline_min
-    side_high = requested_high > baseline_max
+
+    anchors = [float(reference), spot_value]
+    for bound in (known_low, known_high):
+        if bound is None:
+            continue
+        value = float(bound)
+        if not isfinite(value) or value <= 0:
+            raise ValueError("Estremo storico dell'estensione non valido")
+        anchors.append(value)
+    margin = float(reference) * float(buffer_pct)
+    requested_low = min(anchors) - margin
+    requested_high = max(anchors) + margin
+    if requested_low <= 0:
+        requested_low = min(anchors) * .9
+
+    baseline_min = min(core_strikes)
+    baseline_max = max(core_strikes)
+    need_low = requested_low < baseline_min
+    need_high = requested_high > baseline_max
+
     extra = {}
-    if side_low or side_high:
-        for option in snapshot["data"]["options"]:
-            parsed = parse_contract(str(option.get("option", "")))
-            if parsed is None or parsed[0] != expiry:
-                continue
-            _, side, strike = parsed
-            if strike in core_strikes:
-                continue
-            if not ((side_low and requested_low <= strike < baseline_min) or
-                    (side_high and baseline_max < strike <= requested_high)):
-                continue
-            gamma = float(option.get("gamma") or 0)
-            oi = float(option.get("open_interest") or 0)
-            vol = float(option.get("volume") or 0)
-            if not all(isfinite(v) and v >= 0 for v in (gamma, oi, vol)):
-                raise ValueError("Gamma/OI/volume non validi nell'estensione")
-            pair = extra.setdefault(strike, [0.0, 0.0])
-            pair[0 if side == "C" else 1] += (oi + vol) * gamma
-    # Se oltre il limite scegliamo per prima la direzione del movimento;
-    # su ciascun lato manteniamo gli strike CONTIGUI dal bordo Serafini.
-    lower = sorted((k for k in extra if k < baseline_min), reverse=True)
-    upper = sorted((k for k in extra if k > baseline_max))
-    available = max_strikes - len(core)
-    chosen = []
-    if spot_value < reference:
-        sides = (lower, upper)
+    for option in snapshot["data"]["options"]:
+        parsed = parse_contract(str(option.get("option", "")))
+        if parsed is None or parsed[0] != expiry:
+            continue
+        _, side, strike = parsed
+        if strike in core_strikes:
+            continue
+        if not ((need_low and requested_low <= strike < baseline_min)
+                or (need_high and baseline_max < strike <= requested_high)):
+            continue
+        gamma = float(option.get("gamma") or 0)
+        oi = float(option.get("open_interest") or 0)
+        volume = float(option.get("volume") or 0)
+        if not all(isfinite(v) and v >= 0 for v in (gamma, oi, volume)):
+            raise ValueError("Gamma/OI/Volume Cboe non valido nell'estensione")
+        pair = extra.setdefault(strike, [0.0, 0.0])
+        pair[0 if side == "C" else 1] += (oi + volume) * gamma
+
+    lower = sorted(k for k in extra if k < baseline_min)
+    upper = sorted(k for k in extra if k > baseline_max)
+    room = max_strikes - len(core)
+    if room and lower and upper:
+        distance_low = baseline_min - requested_low
+        distance_high = requested_high - baseline_max
+        low_quota = min(len(lower), max(1, min(room - 1, round(
+            room * distance_low / max(distance_low + distance_high, 1e-9)
+        ))))
+        high_quota = min(len(upper), room - low_quota)
+        unused = room - low_quota - high_quota
+        for side in ("lower", "upper"):
+            if unused <= 0:
+                break
+            if side == "lower":
+                added = min(unused, len(lower) - low_quota)
+                low_quota += added
+            else:
+                added = min(unused, len(upper) - high_quota)
+                high_quota += added
+            unused -= added
+    elif lower:
+        low_quota, high_quota = min(len(lower), room), 0
     else:
-        sides = (upper, lower)
-    for side in sides:
-        take = min(available, len(side))
-        chosen.extend(side[:take])
-        available -= take
+        low_quota, high_quota = 0, min(len(upper), room)
+
+    def _select_real_strikes(side, capacity):
+        if capacity <= 0 or not side:
+            return []
+        if len(side) <= capacity:
+            return list(side)
+        # Distribuzione lungo tutto l'intervallo richiesto. Manteniamo
+        # gli estremi e circa un terzo dei NET GAMMA più intensi,
+        # senza aggregare o creare strike sintetici.
+        selected = {side[0], side[-1]} if capacity >= 2 else {side[0]}
+        strong = sorted(side, key=lambda k:
+                        (-abs(extra[k][0] - extra[k][1]), k))
+        strong_slots = min(max(0, capacity - len(selected)), capacity // 3)
+        for strike in strong:
+            if len(selected) >= strong_slots + 2 or len(selected) >= capacity:
+                break
+            selected.add(strike)
+        if len(selected) < capacity:
+            # Scegliere valori realmente presenti, distribuiti uniformemente
+            # rispetto al PREZZO, non alla densità di quotazione Cboe.
+            lo, hi = side[0], side[-1]
+            needed = capacity - len(selected)
+            for i in range(1, needed + 1):
+                desired = lo + (hi - lo) * i / (needed + 1)
+                candidate = min((x for x in side if x not in selected),
+                                key=lambda x: (abs(x - desired), x))
+                selected.add(candidate)
+        return sorted(selected)
+
+    chosen = _select_real_strikes(lower, low_quota) + _select_real_strikes(
+        upper, high_quota
+    )
     final = core + [
-        {"strike_spx": strike,
-         "call_gamma_component": extra[strike][0],
-         "put_gamma_component": extra[strike][1],
-         "net_gamma": extra[strike][0] - extra[strike][1]}
-        for strike in chosen
+        {"strike_spx": k, "call_gamma_component": extra[k][0],
+         "put_gamma_component": extra[k][1],
+         "net_gamma": extra[k][0] - extra[k][1]}
+        for k in chosen
     ]
-    final.sort(key=lambda r: float(r["strike_spx"]))
-    # Copertura misurata soltanto sui livelli disponibili nello snapshot:
-    # non affermare che una fascia è coperta quando la catena è insufficiente.
+    final.sort(key=lambda row: float(row["strike_spx"]))
     actual_low = float(final[0]["strike_spx"])
     actual_high = float(final[-1]["strike_spx"])
-    core_ordered = sorted(core_strikes)
-    steps = [b - a for a, b in zip(core_ordered, core_ordered[1:]) if b > a]
+    steps = [b - a for a, b in zip(sorted(core_strikes), sorted(core_strikes)[1:])]
     tolerance = min(steps) if steps else 0.0
-    # Un target tra due strike quotati e' coperto fino allo strike reale
-    # immediatamente vicino: non segnalare un falso limite per 1-5 punti.
-    complete = ((not side_low or actual_low <= requested_low + tolerance) and
-                (not side_high or actual_high >= requested_high - tolerance))
+    coverage_complete = (
+        (not need_low or actual_low <= requested_low + tolerance)
+        and (not need_high or actual_high >= requested_high - tolerance)
+    )
     return {
-        "expiry": expiry.isoformat(), "rows": final,
-        "core_strikes": len(core), "extra_strikes": len(final) - len(core),
-        "reference_spx": float(reference), "capture_spot_spx": spot_value,
-        "requested_low": requested_low, "requested_high": requested_high,
-        "coverage_complete": complete, "max_strikes": max_strikes,
-        "source": "Stessa fotografia Cboe, estensione grafica non Serafini",
+        "expiry": expiry.isoformat(),
+        "rows": final,
+        "core_strikes": len(core),
+        "extra_strikes": len(final) - len(core),
+        "reference_spx": float(reference),
+        "capture_spot_spx": spot_value,
+        "requested_low": requested_low,
+        "requested_high": requested_high,
+        "actual_low": actual_low,
+        "actual_high": actual_high,
+        "coverage_complete": coverage_complete,
+        "source_strikes_in_range": len(extra) + len(core),
+        "sampled_strikes": max(0, len(extra) - len(chosen)),
+        "max_strikes": max_strikes,
+        "source": "Stessa fotografia Cboe; estensione solo grafica, non Serafini",
     }
 
 
