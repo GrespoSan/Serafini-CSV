@@ -277,20 +277,28 @@ def _report(expiry: date, name: str, prepared: list[Contract],
     distinct = len({c.strike for c in valid})
     valid_call = sum(c.type == "call" for c in valid)
     valid_put = sum(c.type == "put" for c in valid)
-    # Non richiediamo "data OI verificata" per un mero modello diagnostico.
-    # Le catture certificate Alpaca/Edge adottano una gate ulteriore OI-age,
-    # deliberatamente NON certificata dal CSV.
+    # Gate coerente con l'originale gexlab/engine/gex.py (Edge 1.2+):
+    # coverage_ok (percentuale di contratti) e' SOLO un diagnostico,
+    # mentre gex_gate_ok usa il rapporto GEX NON ARROTONDATO.
+    # Non impostiamo OI freshness come certificata: nel CSV la data OI manca.
+    # I limiti minimi di campione e entrambi i lati sono specifici del CSV.
     eligible = (
-        cov.eligible >= 20 and cov.ratio >= .95
-        and gcov.ratio is not None and gcov.ratio >= .98
+        cov.eligible >= 20
+        and gex.gex_gate_ok(gcov)
         and distinct >= 20 and valid_call >= 10 and valid_put >= 10
     )
+    contract_pct = 100.0 * cov.ratio
+    gex_pct = (f"{100.0 * gcov.ratio:.3f}%"
+               if gcov.ratio is not None else "N/D")
     if not eligible:
         basic["reason"] = (
-            f"Copertura insufficiente: {cov.valid}/{cov.eligible} contratti, "
-            f"GEX ±5% {gcov.pct if gcov.pct is not None else 'N/D'}%, "
-            f"strike distinti validi {distinct}, Call {valid_call}, Put {valid_put}. "
-            "Soglie diagnostiche: contratti ≥95%, GEX ≥98%."
+            f"Gate GEX insufficiente o indeterminato: "
+            f"copertura stimata GEX ±5% {gex_pct} (minimo 98% non arrotondato); "
+            f"copertura contratti {cov.valid}/{cov.eligible} = {contract_pct:.1f}% "
+            f"(solo diagnostica), strike distinti validi {distinct}, "
+            f"Call {valid_call}, Put {valid_put}. "
+            "Richiesti >=20 contratti eleggibili, >=20 strike distinti "
+            "e >=10 contratti validi per lato."
         )
         return basic
     levels, _, _ = gex.compute_levels(target, chosen, spot)
@@ -304,7 +312,12 @@ def _report(expiry: date, name: str, prepared: list[Contract],
         basic["reason"] = "Riconciliazione NET GEX Call+Put fallita."
         return basic
     basic.update({
-        "status": "DIAGNOSTICO", "reason": status_hint,
+        "status": "DIAGNOSTICO",
+        "reason": (
+            f"{status_hint} Copertura GEX ±5% {gex_pct}; "
+            f"contratti {cov.valid}/{cov.eligible} = {contract_pct:.1f}% "
+            "(indicatore diagnostico non bloccante)."
+        ),
         "call_wall": levels.call_wall, "put_wall": levels.put_wall,
         "flip": levels.nearest_zero_gamma, "regime": levels.regime,
         "net_gex": net, "gross_gex": gross,
