@@ -137,6 +137,17 @@ def apply_mode(contracts, *, mode: str, captured: datetime,
     info.update(matched=known,eligible=len(band),match_pct=round(ratio*100,2))
     if error is None and (len(band)<20 or ratio<.95):
         error=f"Riconciliazione OCC insufficiente: {known}/{len(band)} nella banda ±10% (minimo 95%)"
+    if error is None:
+        # Do not let a strong 0DTE mask poor Weekly coverage or vice versa.
+        for expiry in sorted(set(target_expiries.values())):
+            group=[c for c in band if c.expiry==expiry]
+            if not group:
+                continue
+            matched=sum(c.symbol in occ for c in group)
+            if matched/len(group)<.95:
+                error=(f"OCC {expiry.isoformat()}: solo {matched}/{len(group)} "
+                       "contratti riconciliati (minimo 95%)")
+                break
     if error:
         if mode=="occ":
             raise OiSourceError(error)
