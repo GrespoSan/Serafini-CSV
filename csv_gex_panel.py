@@ -122,7 +122,7 @@ def render(payload: bytes | None, symbol: str | None) -> None:
     report = info["reports"][selected]
     st.caption(f"**{selected}** · Scadenza: {report['expiry']} · "
                f"Contratti nel CSV: {report['contracts']} · "
-               f"Validi con OI > 0: {report['valid']}")
+               f"Validi GEX (OI > 0 + IV utilizzabile): {report['valid']}")
     if report["status"] != "DIAGNOSTICO":
         st.warning("Qualità insufficiente — livelli, regime e curva GEX N/D. "
                    + report["reason"])
