@@ -58,31 +58,131 @@ def _raw_field_presence(blob: bytes, accepted: set[str]) -> dict[str, dict[str, 
     return presence
 
 
-def _iv_normalization(options: list[dict], present: dict, mode: str) -> tuple[str | None, str]:
-    """Non indovina IV ambigue: 0.20 (decimale) vs 20 (percentuale)."""
+def _iv_normalization(options: list[dict], present: dict, mode: str, *,
+                      spot: float | None = None, captured: datetime | None = None,
+                      cal: TradingCalendar | None = None,
+                      target_expiries: dict | None = None) -> tuple[str | None, str]:
+    """Rileva il FORMATO della IV senza far dipendere la scelta da ogni outlier.
+
+    In una catena Cboe completa (anche >30.000 contratti) la IV degli strike
+    remoti puo' superare 100% o essere quasi zero. Il controllo precedente
+    richiedeva che TUTTI i valori fossero [0.01,1] o [10,500] e bloccava
+    l'intero GEX per un singolo outlier.
+
+    Questa versione usa solo contratti vicini allo spot, delle scadenze in
+    esame, con OI > 0, e sceglie l'unita' solo quando una convenzione ha
+    evidenza netta. I valori estremi non vengono corretti automaticamente:
+    rimangono esclusi dalle verifiche di copertura GEX.
+    """
     if mode not in {"auto", "decimal", "percent"}:
         raise ValueError("Formato IV sconosciuto.")
     if mode == "decimal":
         return "decimal", "Unità IV dichiarata manualmente: decimale."
     if mode == "percent":
         return "percent", "Unità IV dichiarata manualmente: percentuale."
-    values = [
-        float(o["iv"]) for o in options
-        if present.get(o["option"], {}).get("iv")
+
+    present_iv = [
+        o for o in options
+        if present.get(o.get("option"), {}).get("iv")
         and isinstance(o.get("iv"), (float, int))
         and math.isfinite(float(o["iv"])) and float(o["iv"]) > 0
     ]
-    if not values:
-        return None, "Il CSV non contiene valori IV utilizzabili."
-    if all(0.01 <= v <= 1.0 for v in values):
-        return "decimal", "Formato IV rilevato: decimale (es. 0,20)."
-    if all(10.0 <= v <= 500.0 for v in values):
-        return "percent", "Formato IV rilevato: percentuale (es. 20 = 20%)."
-    return None, (
-        "Unità IV ambigua o mista: selezionare esplicitamente Decimale o "
-        "Percentuale. Nessuna conversione presunta."
-    )
+    if not present_iv:
+        return None, "Il CSV non contiene valori IV positivi utilizzabili."
 
+    sample = []
+    target_dates = set(target_expiries.values()) if target_expiries else None
+    if spot is not None and math.isfinite(float(spot)) and float(spot) > 0:
+        for o in present_iv:
+            if not o.get("open_interest") or o["open_interest"] <= 0:
+                continue
+            try:
+                occ = parse_occ(str(o["option"]).strip().replace(" ", ""))
+            except (ValueError, TypeError):
+                continue
+            if target_dates is not None and occ.expiry not in target_dates:
+                continue
+            if abs(occ.strike / float(spot) - 1.0) > .10:
+                continue
+            sample.append((o, occ))
+    if len(sample) < 20:
+        return None, (
+            f"Unità IV non determinabile: solo {len(sample)} contratti "
+            "liquidi con IV nelle scadenze e nella banda ±10% spot. "
+            "Nessuna unità presunta."
+        )
+
+    values = [float(o["iv"]) for o, _ in sample]
+    decimal_evidence = sum(.01 <= v <= 1.0 for v in values)
+    percent_evidence = sum(10.0 <= v <= 500.0 for v in values)
+    decisive = decimal_evidence + percent_evidence
+    count = len(values)
+    # Il supporto della convenzione deve essere schiacciante. Non confondere
+    # valori IV molto alti (2.0 = 200%) con IV espressa in percentuale.
+    if decisive >= 20:
+        if decimal_evidence / decisive >= .98 and decimal_evidence / count >= .60:
+            return ("decimal",
+                    f"IV riconosciuta automaticamente in decimali: "
+                    f"{decimal_evidence}/{count} contratti vicini allo spot "
+                    f"nelle scadenze analizzate; outlier esclusi dai soli "
+                    f"controlli di unità, non dai quality gate.")
+        if percent_evidence / decisive >= .98 and percent_evidence / count >= .60:
+            return ("percent",
+                    f"IV riconosciuta automaticamente in percentuale: "
+                    f"{percent_evidence}/{count} contratti vicini allo spot "
+                    f"nelle scadenze analizzate; outlier sottoposti ai quality gate.")
+
+    if decimal_evidence >= 10 and percent_evidence >= 10:
+        return None, (
+            f"IV potenzialmente mista nelle scadenze esaminate: "
+            f"{decimal_evidence} valori decimali e {percent_evidence} "
+            "percentuali. Nessuna conversione automatica."
+        )
+
+    # Caso borderline (IV tra 1 e 10): confronto incrociato con il Gamma
+    # Cboe dello stesso contratto, solo vicino allo spot. Serve una prova
+    # forte sia dell'errore assoluto sia del vantaggio su unita' alternativa.
+    if captured is not None and cal is not None and spot is not None:
+        from csv_gex_core import bsm
+        from csv_gex_core.calendar import time_to_expiry
+        scores = {"decimal": [], "percent": []}
+        for option, occ in sample:
+            if abs(occ.strike / float(spot) - 1.0) > .015:
+                continue
+            observed = option.get("gamma")
+            if (not isinstance(observed, (int, float)) or
+                    not math.isfinite(float(observed)) or observed <= 1e-7):
+                continue
+            T = time_to_expiry(
+                captured, occ.expiry,
+                "AM" if occ.root in INDEX_AM_ROOTS else "PM", cal
+            )
+            if T <= 0:
+                continue
+            for unit, divisor in (("decimal", 1.0), ("percent", 100.0)):
+                iv = float(option["iv"]) / divisor
+                if not gex.iv_ok(iv):
+                    continue
+                theoretical = bsm.gamma(float(spot), occ.strike, T, 0.0, iv)
+                if theoretical > 1e-10 and math.isfinite(theoretical):
+                    scores[unit].append(abs(math.log(theoretical / float(observed))))
+        if min(len(scores["decimal"]), len(scores["percent"])) >= 12:
+            errors = {k: sorted(v)[len(v) // 2] for k, v in scores.items()}
+            best = min(errors, key=errors.get)
+            other = "percent" if best == "decimal" else "decimal"
+            if errors[best] < math.log(1.6) and (
+                    errors[other] - errors[best] > math.log(3.0)):
+                return best, (
+                    "IV riconosciuta tramite controllo incrociato BSM/Gamma Cboe "
+                    f"su {len(scores[best])} contratti vicini allo spot. "
+                    "Corrispondenza diagnostica, non certificazione dei prezzi."
+                )
+    return None, (
+        f"Unità IV realmente ambigua: nel campione vicino allo spot "
+        f"{decimal_evidence} decimali, {percent_evidence} percentuali, "
+        f"{count - decisive} valori intermedi/estremi. "
+        "Selezionare manualmente solo dopo verifica del formato CSV."
+    )
 
 def _calendar(captured: datetime) -> TradingCalendar:
     """Calendario NYSE per chiusure e festivi; proxy dichiarato per Cboe options."""
@@ -232,10 +332,13 @@ def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto") -> dict:
         raise ValueError("Prezzo Cboe mancante o non valido.")
     accepted = {str(o["option"]) for o in doc["data"]["options"]}
     presence = _raw_field_presence(blob, accepted)
-    unit, unit_note = _iv_normalization(doc["data"]["options"], presence, iv_mode)
-    contract_list = _from_snapshot(doc, presence, unit)
     cal = _calendar(captured)
     target = _target_expiries(captured, cal)
+    unit, unit_note = _iv_normalization(
+        doc["data"]["options"], presence, iv_mode,
+        spot=spot, captured=captured, cal=cal, target_expiries=target,
+    )
+    contract_list = _from_snapshot(doc, presence, unit)
     prepared = gex.finalize(contract_list, spot, captured, cal)
     reports = {}
     for name, expiry in target.items():
