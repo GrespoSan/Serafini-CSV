@@ -47,8 +47,11 @@ class ExtendedNetGammaTests(unittest.TestCase):
         self.assertEqual(
             {k: extended[k] for k in original}, original)
         self.assertEqual(len(extended), len(v["rows"]))
-        self.assertEqual(v["source_strikes_in_range"], 601)
-        self.assertEqual(v["sampled_strikes"], 401)
+        # Lo strike esattamente a 6000 non fa parte del nucleo originale
+        # Serafini (25 strettamente sotto + 25 strettamente sopra) e non
+        # viene inserito artificialmente dall'estensione grafica.
+        self.assertEqual(v["source_strikes_in_range"], 600)
+        self.assertEqual(v["sampled_strikes"], 400)
 
     def test_current_snapshot_spot_and_previous_ref_change_target(self):
         v = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6100)
