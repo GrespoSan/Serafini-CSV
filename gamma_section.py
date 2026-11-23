@@ -383,17 +383,18 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     except Exception as exc:
         sigma_levels = None
         sigma_error = f'{type(exc).__name__}: {str(exc)[:115]}'
-    # Estensione SOLO grafica: il nucleo Serafini resta 25+25, C1/P1,
-    # analisi e formula (OI+Volume)*Gamma non vengono modificati.
-    # Gli estremi RTH PRECEDENTI sono aggiunti solo quando già verificati
-    # dal modulo StdDev M15. Non si utilizzano valori futuri del giorno.
+    # Estensione INTELLIGENTE, solo grafica. La spunta resta ON per default
+    # ma non aggiunge strike se i 25+25 già coprono la fascia richiesta.
+    # Calcolo Serafini, C1/P1 e valori riepilogativi rimangono identici.
     show_visual_extension = st.checkbox(
-        'Estensione dinamica NET GAMMA — solo grafici',
+        'Estensione intelligente NET GAMMA — solo grafici',
         value=True, key='gamma_visual_extension_v1',
-        help='Sulla stessa fotografia Cboe copre chiusura SPX precedente e '
-             'prezzo nello snapshot, con margine ±5%. Se disponibili, include '
-             'gli estremi RTH della sessione precedente ricavati dalle M15. '
-             'Fino a 200 strike Cboe reali per scadenza; 25+25 e C1/P1 invariati.'
+        help='ON di default. Se il nucleo 25+25 copre i prezzi noti e un '
+             'piccolo margine adattivo, visualizza soltanto 50 strike. '
+             'Altrimenti estende solo dove serve, massimo 200 strike reali '
+             'Cboe per scadenza. Usa chiusura precedente, spot della foto '
+             'e, quando verificati, estremi RTH precedenti. '
+             'Non modifica NET GAMMA e C1/P1.'
     )
     known_low = known_high = None
     range_reference = 'SPX chiusura precedente + spot Cboe'
@@ -420,7 +421,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         try:
             visual_profiles[title] = visual_profile(
                 snap, core, expiry, ref, snap['data'].get('current_price'),
-                buffer_pct=.05, max_strikes=200,
+                max_strikes=200,  # margine adattivo predefinito nel motore
                 known_low=known_low, known_high=known_high,
             )
         except (ValueError, TypeError, KeyError, OverflowError) as exc:
@@ -428,10 +429,11 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                        'Mostro soltanto i 50 strike Serafini originali.')
             visual_profiles[title] = core
     if show_visual_extension:
-        st.caption('Range grafico ex ante: ' + range_reference +
-                   ' · margine 5% SPX · massimo 200 strike reali/scadenza. '
-                   'Con limiti di capacità vengono selezionati strike '
-                   'rappresentativi senza aggregare il NET GAMMA.')
+        st.caption('Estensione intelligente: ' + range_reference +
+                   ' · margine adattivo basato su griglia strike e '
+                   'ampiezza dei prezzi già noti (0,25–1% del riferimento). '
+                   'Se bastano 25+25 non aggiunge nulla; altrimenti estende '
+                   'solo il lato scoperto, fino a 200 strike reali/scadenza.')
     # Riepilogo CANONICO: solo profili Serafini 25+25, non gli strike
     # selezionati per la grafica. Il valore NON cambia attivando
     # l'estensione, la sua copertura o il suo limite (140/200).
@@ -514,16 +516,23 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             if show_visual_extension and visual.get('requested_low') is not None:
                 covered = bool(visual.get('coverage_complete'))
                 omitted = visual.get('sampled_strikes', 0)
-                st.caption(
-                    f"Copertura NET GAMMA grafica SPX "
-                    f"{visual['actual_low']:.2f}–{visual['actual_high']:.2f}"
-                    f" · obiettivo {visual['requested_low']:.2f}–"
-                    f"{visual['requested_high']:.2f}"
-                    + (" · estremi coperti" if covered else
-                       " · fascia non interamente coperta dai dati Cboe")
-                    + (f" · {omitted} strike Cboe tralasciati per limite "
-                       "grafico, senza interpolazioni" if omitted else "")
-                )
+                if visual.get('decision') == '50_sufficienti':
+                    st.caption(
+                        "Estensione intelligente: i 50 strike originali "
+                        "coprono già il range e il margine; nessuno strike "
+                        "aggiuntivo inserito nel grafico o nel Pine."
+                    )
+                else:
+                    st.caption(
+                        f"Copertura NET GAMMA grafica SPX "
+                        f"{visual['actual_low']:.2f}–{visual['actual_high']:.2f}"
+                        f" · obiettivo {visual['requested_low']:.2f}–"
+                        f"{visual['requested_high']:.2f}"
+                        + (" · estremi coperti" if covered else
+                           " · fascia non interamente coperta dai dati Cboe")
+                        + (f" · {omitted} strike Cboe tralasciati per limite "
+                           "grafico, senza interpolazioni" if omitted else "")
+                    )
             records = [{**r, 'strike_es': r['strike_spx'] + offset if offset is not None else None} for r in visual['rows']]
             import pandas as pd
             frame = pd.DataFrame(records)
