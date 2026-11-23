@@ -79,15 +79,20 @@ def profile(snapshot: dict, expiry: date, reference: float, strike_count: int = 
 
 
 def visual_profile(snapshot: dict, base: dict, expiry: date, reference: float,
-                   spot=None, buffer_pct: float = 0.05, max_strikes: int = 200,
-                   known_low=None, known_high=None):
-    """Estensione grafica *soltanto* da strike Cboe reali della stessa fotografia.
+                   spot=None, buffer_pct: float | None = None,
+                   max_strikes: int = 200, known_low=None, known_high=None):
+    """Estensione INTELLIGENTE, esclusivamente grafica, dagli strike reali Cboe.
 
-    Il nucleo Serafini 25+25 non cambia mai. La fascia obiettivo usa solo
-    chiusura precedente, prezzo nello snapshot e, se forniti e verificati,
-    estremi di una sessione gia' conclusa. Nessuna candela successiva.
-    Il limite di 200 per 0DTE e Weekly lascia margine alle linee GEX/Pine
-    entro il limite massimo di 500 linee TradingView.
+    Prima verifica se i 50 strike Serafini coprono la fascia dei prezzi
+    conosciuti ex ante con un piccolo margine. Se sì restituisce solo i 50
+    originali, senza nemmeno scansionare gli altri contratti. Se no include
+    strike solo sul lato (o sui lati) realmente scoperto, al massimo 200.
+
+    Margine adattivo: massimo tra 0,25% della chiusura precedente,
+    due passi mediani della griglia strike e 20% dell'escursione degli
+    ancoraggi verificati; limite superiore 1% del riferimento.
+    Il parametro buffer_pct esplicito conserva la modalità a margine
+    fisso per confronti metodologici e test regressivi.
     """
     from math import isfinite
 
@@ -97,17 +102,22 @@ def visual_profile(snapshot: dict, base: dict, expiry: date, reference: float,
         raise ValueError("L'estensione richiede i 50 strike Serafini 25+25 invariati")
     if not isfinite(float(reference)) or reference <= 0:
         raise ValueError("Riferimento SPX non valido")
-    if not (0 < float(buffer_pct) <= .10 and 50 <= max_strikes <= 200):
-        raise ValueError("Estensione: fascia o massimo strike non consentito")
+    if not (isinstance(max_strikes, int) and 50 <= max_strikes <= 200):
+        raise ValueError("Massimo strike grafici consentito: 50–200")
+    if buffer_pct is not None and (
+            not isfinite(float(buffer_pct))
+            or not 0 < float(buffer_pct) <= .10):
+        raise ValueError("Margine grafico esplicito non consentito")
 
+    reference = float(reference)
     try:
         spot_value = float(spot)
         if not isfinite(spot_value) or spot_value <= 0:
-            spot_value = float(reference)
+            spot_value = reference
     except (ValueError, TypeError, OverflowError):
-        spot_value = float(reference)
+        spot_value = reference
 
-    anchors = [float(reference), spot_value]
+    anchors = [reference, spot_value]
     for bound in (known_low, known_high):
         if bound is None:
             continue
@@ -115,16 +125,57 @@ def visual_profile(snapshot: dict, base: dict, expiry: date, reference: float,
         if not isfinite(value) or value <= 0:
             raise ValueError("Estremo storico dell'estensione non valido")
         anchors.append(value)
-    margin = float(reference) * float(buffer_pct)
-    requested_low = min(anchors) - margin
-    requested_high = max(anchors) + margin
-    if requested_low <= 0:
-        requested_low = min(anchors) * .9
 
-    baseline_min = min(core_strikes)
-    baseline_max = max(core_strikes)
+    ordered_core = sorted(core_strikes)
+    grid_steps = sorted(
+        hi - lo for lo, hi in zip(ordered_core, ordered_core[1:])
+        if hi > lo
+    )
+    grid_step = grid_steps[len(grid_steps) // 2]
+    if buffer_pct is None:
+        anchor_span = max(anchors) - min(anchors)
+        margin = min(
+            max(reference * .0025, 2.0 * grid_step, .20 * anchor_span),
+            reference * .01,
+        )
+        band_mode = "adattivo"
+    else:
+        margin = reference * float(buffer_pct)
+        band_mode = "fisso"
+    requested_low = max(min(anchors) - margin, min(anchors) * .90)
+    requested_high = max(anchors) + margin
+
+    baseline_min = ordered_core[0]
+    baseline_max = ordered_core[-1]
     need_low = requested_low < baseline_min
     need_high = requested_high > baseline_max
+
+    # In una giornata normale il Pine con showExtension=true deve essere
+    # visivamente IDENTICO al 25+25. Non analizzare le altre 32k opzioni.
+    if not (need_low or need_high) or max_strikes == 50:
+        sufficient = not (need_low or need_high)
+        return {
+            "expiry": expiry.isoformat(),
+            "rows": core,
+            "core_strikes": 50,
+            "extra_strikes": 0,
+            "reference_spx": reference,
+            "capture_spot_spx": spot_value,
+            "requested_low": requested_low,
+            "requested_high": requested_high,
+            "actual_low": baseline_min,
+            "actual_high": baseline_max,
+            "coverage_complete": sufficient,
+            "source_strikes_in_range": 50,
+            "sampled_strikes": 0,
+            "max_strikes": max_strikes,
+            "band_mode": band_mode,
+            "margin_points": margin,
+            "need_low": need_low,
+            "need_high": need_high,
+            "decision": "50_sufficienti" if sufficient else "limite_50",
+            "source": "Stessa fotografia Cboe; solo rappresentazione grafica",
+        }
 
     extra = {}
     for option in snapshot["data"]["options"]:
@@ -232,6 +283,12 @@ def visual_profile(snapshot: dict, base: dict, expiry: date, reference: float,
         "source_strikes_in_range": len(extra) + len(core),
         "sampled_strikes": max(0, len(extra) - len(chosen)),
         "max_strikes": max_strikes,
+        "band_mode": band_mode,
+        "margin_points": margin,
+        "need_low": need_low,
+        "need_high": need_high,
+        "decision": ("estesa_entrambi" if need_low and need_high else
+                     "estesa_sotto" if need_low else "estesa_sopra"),
         "source": "Stessa fotografia Cboe; estensione solo grafica, non Serafini",
     }
 
