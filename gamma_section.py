@@ -151,6 +151,25 @@ def _snapshot_download_clock(store, week, logs, file_name):
     return idx.get(f'{week}/snapshots/{file_name}',(None,None))[1]
 
 
+def _csv_cboe_capture_label(snapshot):
+    """Ora della fotografia Cboe CSV, non dell'operazione di download.
+
+    Il CSV ha un timestamp UTC verificato dal parser. Un file importato
+    manualmente non ha registri di download: non utilizzare mai le vecchie
+    etichette Supabase per rappresentarlo.
+    """
+    provenance = snapshot.get('_import_provenance') or {}
+    if (provenance.get('source') != 'CBOE_CSV_MANUAL_USER_EXPORT'
+            or provenance.get('timestamp_utc_converted') is not True):
+        return None
+    try:
+        stamp = datetime.strptime(
+            str(snapshot['timestamp']), '%Y-%m-%d %H:%M:%S'
+        ).replace(tzinfo=ZoneInfo('UTC'))
+        return f'Fotografia CSV Cboe · ore {stamp.astimezone(ZoneInfo("Europe/Rome")):%H:%M} Roma'
+    except (KeyError, ValueError, TypeError):
+        return 'Fotografia CSV Cboe · ora fonte non verificabile'
+
 
 def render(store, week, snaps, logs, *, show_heading=True, selector_external=False):
     if show_heading:
@@ -174,8 +193,12 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         st.error(f'Impossibile leggere lo snapshot: {type(exc).__name__}')
         return
     timestamp = str(snap.get('timestamp') or '')
-    acquisition_label = _acquisition_label(store, week, logs, choice)
-    download_clock = _snapshot_download_clock(store, week, logs, choice)
+    csv_capture_label = _csv_cboe_capture_label(snap)
+    acquisition_label = (csv_capture_label if csv_capture_label is not None
+                         else _acquisition_label(store, week, logs, choice))
+    # Il timestamp originale Cboe NON prova l'ora di download del file.
+    download_clock = (None if csv_capture_label is not None
+                      else _snapshot_download_clock(store, week, logs, choice))
     # Confronto soltanto con il file precedente della STESSA giornata;
     # non interpreta il fuso del timestamp Cboe e non blocca il profilo.
     day_prefix = choice[:len('SPX_CBOE_') + 8]
@@ -318,10 +341,14 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         date_code = snapshot_name[len('SPX_CBOE_'):len('SPX_CBOE_') + 8]
         date_display = (f'{date_code[6:8]}/{date_code[4:6]}/{date_code[:4]}'
                         if len(date_code) == 8 and date_code.isdigit() else 'Data n.d.')
-        slot_label = _acquisition_label(store, week, logs, snapshot_name)
-        actual_clock = _snapshot_download_clock(store, week, logs, snapshot_name)
-        clock_label = (f' · download {actual_clock} Roma'
-                       if actual_clock else ' · ora download non disponibile')
+        if csv_capture_label is not None and snapshot_name == choice:
+            slot_label, actual_clock = csv_capture_label, None
+            clock_label = ''
+        else:
+            slot_label = _acquisition_label(store, week, logs, snapshot_name)
+            actual_clock = _snapshot_download_clock(store, week, logs, snapshot_name)
+            clock_label = (f' · download {actual_clock} Roma'
+                           if actual_clock else ' · ora download non disponibile')
         snapshot_menu_labels[snapshot_name] = (
             f'{date_display} · {slot_label}{clock_label} · {snapshot_name}'
         )
@@ -458,8 +485,11 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             result = computed_profiles[title]
             if title == '0DTE' and result['rows']:
                 candidate_0dte = find_candidates(result['rows'], ref)
-            capture_info = (f'{acquisition_label} · download ore {download_clock} Roma'
-                            if download_clock else f'{acquisition_label} · ora download non disponibile')
+            capture_info = (
+                csv_capture_label if csv_capture_label is not None else
+                (f'{acquisition_label} · download ore {download_clock} Roma'
+                 if download_clock else f'{acquisition_label} · ora download non disponibile')
+            )
             # Data e ora della fotografia evidenziate: nessuna conversione
             # del timestamp Cboe privo di fuso, né modifica ai Gamma.
             from html import escape as _html_escape
@@ -657,7 +687,8 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
     if candidate_0dte is not None:
         from option_structure_lab import render_lab
         snapshot_description = (
-            'Ultimo rilevamento' if choice == names[0] else acquisition_label
+            csv_capture_label if csv_capture_label is not None else
+            ('Ultimo rilevamento' if choice == names[0] else acquisition_label)
         )
         chosen = render_lab(
             candidate_0dte, computed_profiles.get('0DTE'), offset,
