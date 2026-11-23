@@ -56,7 +56,59 @@ def _gex_metric(column, label, value, *, negative=False, key=""):
         column.metric(label, value)
 
 
-def _curve_chart(report, spot, *, symbol, es_spx_basis=None):
+def curve_extrema(report, *, symbol, es_spx_basis=None):
+    """Global extrema on the EXISTING 201-point theoretical curve.
+
+    Not the maximum/minimum strike or a forecast. If there are equal
+    values, the closest scenario to current spot wins deterministically.
+    """
+    curve=report.get("curve") or []
+    values=[]
+    for row in curve:
+        try:
+            price=gex_display_price(row["spot"],symbol,es_spx_basis)
+            gex=float(row["net_gex"])
+            if price is None or not math.isfinite(gex):
+                return None
+            values.append((price,gex))
+        except (ValueError,TypeError,KeyError,OverflowError):
+            return None
+    if len(values)<2:
+        return None
+    center=values[len(values)//2][0]
+    high=max(values,key=lambda p:(p[1],-abs(p[0]-center)))
+    low=min(values,key=lambda p:(p[1],abs(p[0]-center)))
+    return {"maximum":{"price":high[0],"gex":high[1]},
+            "minimum":{"price":low[0],"gex":low[1]}}
+
+
+@st.fragment(run_every=60)
+def _live_es_curve(report, spot, *, symbol, es_spx_basis, selected):
+    # Live quote has its own acquisition clock, independent of CSV snapshot.
+    quote=_cached_es_quote() if symbol=="SPX" else None
+    if symbol=="SPX":
+        if quote and quote.get("price") is not None:
+            k=quote["symbol"]
+            label=("contratto trimestrale" if quote["contract_kind"]=="EXPLICIT"
+                   else "continuo Yahoo: può differire da ESZ26")
+            st.caption(
+                f"**ES · {quote['price']:,.2f}** · {k} ({label}) · "
+                f"{quote['observed_rome']} Roma · "
+                f"età osservazione {quote['age_minutes']:.1f} minuti · "
+                "Yahoo Finance, quotazione potenzialmente ritardata. "
+                "La curva rimane riferita al CSV, non viene ricalcolata."
+            )
+        else:
+            st.caption("**Prezzo ES: N/D** — quotazione Yahoo non disponibile/aggiornata. "
+                       "Nessun prezzo simulato con il differenziale ES−SPX.")
+    st.plotly_chart(
+        _curve_chart(report, spot, symbol=symbol,
+                     es_spx_basis=es_spx_basis, es_quote=quote),
+        use_container_width=True,key=f"csv_gex_curve_{selected}",
+    )
+
+
+def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
     grid = report["curve"]
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -66,6 +118,23 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None):
         name="GEX scenario",
         hovertemplate="Spot teorico %{x:,.2f}<br>NET GEX %{y:+.3f} mld<extra></extra>",
     ))
+    # Green/red extrema are computed on the same displayed 201-point curve.
+    extreme=curve_extrema(report,symbol=symbol,es_spx_basis=es_spx_basis)
+    if extreme:
+        for key,color,label,position in (
+            ("maximum","#22c55e","Picco MAX","top center"),
+            ("minimum","#f87171","Picco MIN","bottom center"),
+        ):
+            item=extreme[key]
+            fig.add_trace(go.Scatter(
+                x=[item["price"]],y=[item["gex"]/1e9],
+                mode="markers+text",text=[label],textposition=position,
+                textfont=dict(size=11,color=color),
+                marker=dict(size=10,color=color,line=dict(width=1,color="#ffffff")),
+                hovertemplate=(f"{label}: prezzo %{{x:,.2f}}<br>"
+                               "NET GEX %{y:+.3f} mld<extra></extra>"),
+                showlegend=False,name=label,
+            ))
     fig.add_hline(y=0, line_color="#717984", line_width=1)
     fig.add_vline(x=gex_display_price(spot, symbol, es_spx_basis),
                   line_dash="dot", line_color="#f4f5f6",
@@ -80,8 +149,17 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None):
             fig.add_vline(x=gex_display_price(value, symbol, es_spx_basis),
                           line_dash="dash", line_color=color,
                           annotation_text=label, annotation_position="top")
+    # Direct ES futures quote. NOT SPX spot + basis, not a GEX recalculation.
+    if symbol=="SPX" and es_quote and es_quote.get("price") is not None:
+        price=float(es_quote["price"])
+        fig.add_vline(
+            x=price,line_dash="dashdot",line_width=2,
+            line_color="#fb923c",
+            annotation_text=f"ES {price:,.2f} · {es_quote['symbol']}",
+            annotation_position="bottom",
+        )
     fig.update_layout(
-        template="plotly_dark", height=450,
+        template="plotly_dark", height=490,
         margin=dict(l=18, r=25, t=35, b=30),
         xaxis_title=(f"Scenario teorico prezzo {gex_price_label(symbol)}"
                      + (" · differenziale costante" if symbol == "SPX" else "")),
@@ -126,6 +204,15 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
                 "per analizzare separatamente il GEX.")
         return
     digest = hashlib.sha256(payload).hexdigest()
+    st.selectbox(
+        "Fonte Open Interest per il GEX",
+        list(OI_LABELS),
+        key="csv_gex_oi_source",
+        help=("Auto: prova OCC solo sul CSV della seduta corrente; "
+              "se la riconciliazione non supera il 95%, torna al CSV con avviso. "
+              "OCC only: nessun fallback. La data OI non è certificata "
+              "dal file OCC Series Search.")
+    )
     st.markdown(
         f"**Sottostante CSV:** {symbol} · "
         + ("**Livelli visualizzati:** ES/MES · " if symbol == "SPX" else "")
@@ -143,7 +230,9 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
              "è possibile correggerla qui: l'app ricalcola da sola al cambio.",
     )
     mode = labels[choice]
-    signature = (digest, symbol, mode)
+    oi_mode=OI_LABELS.get(st.session_state.get("csv_gex_oi_source",
+                                               DEFAULT_OI_LABEL),"auto")
+    signature = (digest, symbol, mode, oi_mode)
     # Il report è stato preparato automaticamente prima dei Pine.
     # Qui si visualizza soltanto: nessun pulsante, rerun o secondo download.
     saved = st.session_state.get("csv_gex_last_report")
@@ -165,6 +254,24 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
         f"Contratti analizzati: {info['csv_contracts']} · "
         f"OI assenti: {info['oi_missing']} · IV assenti: {info['iv_missing']}."
     )
+    oi=info.get("oi_info") or {}
+    oi_source=oi.get("effective_source","CSV_CBOE")
+    if oi_source=="OCC_SERIES_SEARCH":
+        st.caption(
+            f"**Fonte OI GEX: OCC Series Search** · "
+            f"download {oi.get('occ_download_utc') or 'N/D'} · "
+            f"riconciliati {oi.get('matched')}/{oi.get('eligible')} contratti "
+            f"(±10% spot; {oi.get('match_pct')}%). "
+            "**Data di riferimento OI: N/D** (OCC non la certifica in questo report). "
+            "La IV resta quella del CSV."
+        )
+    else:
+        st.caption("**Fonte OI GEX: CSV Cboe** · data OI non documentata.")
+    if oi.get("fallback_reason"):
+        st.warning(
+            "**Fallback OCC → CSV dichiarato:** "+str(oi["fallback_reason"]) +
+            ". I valori GEX e il Pine sono calcolati soltanto con l'OI CSV."
+        )
     st.caption(info["iv_note"])
     selected = st.radio("Scadenza GEX", ["0DTE", "Weekly"], horizontal=True,
                         key="csv_gex_selected_expiry")
@@ -250,10 +357,20 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
         "Gamma Flip solo se la curva attraversa realmente lo zero."
     )
     if basis_available:
-        st.plotly_chart(
-            _curve_chart(report, info["spot"], symbol=symbol,
-                         es_spx_basis=es_spx_basis),
-            use_container_width=True, key=f"csv_gex_curve_{selected}",
+        extremes=curve_extrema(report,symbol=symbol,es_spx_basis=es_spx_basis)
+        if extremes:
+            peak_high,peak_low=st.columns(2)
+            for col,key,label in ((peak_high,"maximum","Picco massimo curva"),
+                                  (peak_low,"minimum","Picco minimo curva")):
+                point=extremes[key]
+                col.metric(f"{label} · prezzo {price_symbol}",
+                           _number(point["price"]),
+                           f"NET GEX {point['gex']/1e9:+.3f} mld USD / 1%")
+            st.caption("Massimo e minimo globali dei 201 punti della curva "
+                       "teorica nel range ±10%: non sono previsioni né strike.")
+        _live_es_curve(
+            report,info["spot"],symbol=symbol,
+            es_spx_basis=es_spx_basis,selected=selected,
         )
         with st.expander("GEX per strike · composizione Call / Put", expanded=False):
             st.plotly_chart(
