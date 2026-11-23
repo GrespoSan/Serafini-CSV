@@ -1,0 +1,39 @@
+name: Serafini CSV — OCC/ES public sources smoke (read only)
+on:
+  push:
+    paths:
+      - '.github/workflows/csv-gex-sources-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Direct OCC public SPX Series Search and Yahoo ES delayed quote
+        run: |
+          python - <<'PY'
+          from csv_gex_oi import fetch_occ_oi
+          from csv_gex_es_quote import fetch_es_quote
+          quotes=fetch_es_quote()
+          print('ES_QUOTE_DATA', {k:v for k,v in quotes.items() if k not in ('error',)})
+          if quotes.get('price') is None:
+              print('ES_QUOTE_UNAVAILABLE',quotes.get('error'))
+          sample={"SPXW261123C07250000","SPXW261123P07250000",
+                  "SPXW261127C07250000","SPXW261127P07250000"}
+          try:
+              oi,info=fetch_occ_oi("SPX",sample)
+              print('OCC_PUBLIC_SOURCE_REACHED',
+                    'matched_sample',len(oi),
+                    'download_utc',info.get('download_utc'),
+                    'OI_ASOF',info.get('oi_asof_date'),
+                    'OCC_VALUES',oi)
+          except Exception as exc:
+              print('OCC_PUBLIC_SOURCE_UNAVAILABLE',type(exc).__name__,str(exc)[:240])
+          print('NO_WRITES_NO_TRADING_NO_PRIVATE_SECRETS')
+          PY
