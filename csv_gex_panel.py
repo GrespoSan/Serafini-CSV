@@ -7,11 +7,39 @@ import plotly.graph_objects as go
 import streamlit as st
 from csv_gex_engine import analyze_csv_gex, MODEL_LABEL
 from csv_gex_price_display import gex_display_price, gex_price_label
+from csv_gex_oi import fetch_occ_oi
+from csv_gex_es_quote import fetch_es_quote
+
+OI_LABELS = {
+    "Auto · OCC se confrontabile, altrimenti CSV": "auto",
+    "OCC Series Search · solo OCC, nessun fallback": "occ",
+    "CSV Cboe · Open Interest del file": "csv",
+}
+DEFAULT_OI_LABEL = "Auto · OCC se confrontabile, altrimenti CSV"
+
 
 
 @st.cache_data(show_spinner=False, max_entries=6, ttl=3600)
-def _cached_gex(blob, symbol, units):
-    return analyze_csv_gex(blob, symbol, units)
+def _cached_gex(blob, symbol, units, oi_mode="csv", occ_values=None,
+                occ_provenance=None, occ_error=None):
+    return analyze_csv_gex(
+        blob, symbol, units, oi_mode=oi_mode,
+        occ_values=occ_values, occ_provenance=occ_provenance,
+        occ_error=occ_error,
+    )
+
+
+@st.cache_data(show_spinner=False, max_entries=8, ttl=900)
+def _cached_occ(symbol, accepted):
+    """Cache a single OCC query for 15 minutes, not a historical CSV."""
+    return fetch_occ_oi(symbol, set(accepted))
+
+
+@st.cache_data(show_spinner=False, max_entries=5, ttl=60)
+def _cached_es_quote():
+    """Actual delayed CME quote; chart source timestamp is not the fetch time."""
+    return fetch_es_quote()
+
 
 
 def _number(value):
