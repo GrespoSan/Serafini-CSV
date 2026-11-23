@@ -51,7 +51,7 @@ class GexCSVExportTests(unittest.TestCase):
         self.assertIn("var array<float> netGammaOriginal = array.from(10.0, -20.0)", result)
         self.assertIn("float _csvGex0Call = 102.25", result)
         self.assertIn("float _csvGexWPut = 90.00", result)
-        self.assertIn('input.bool(true, "Mostra GEX 0DTE"', result)
+        self.assertIn('input.bool(false, "Mostra GEX 0DTE"', result)
         self.assertIn('input.bool(false, "Mostra GEX Weekly"', result)
         self.assertIn('if validTicker', result)
         self.assertIn(SHA[:16], result)
@@ -138,6 +138,9 @@ class GexCSVExportTests(unittest.TestCase):
         self.assertIn("xloc=xloc.bar_time, yloc=yloc.price", output)
         self.assertIn("style=label.style_label_left", output)
         self.assertIn("extend=extend.both", output)
+        self.assertIn("size=size.normal", output)
+        self.assertIn("color=color.new(color.black, 25)", output)
+        self.assertNotIn('input.bool(true, "Mostra GEX', output)
 
     def test_legacy_edge_group_omitted_when_no_edge_data(self):
         from pine_gex_overlay import append_gex_overlays
@@ -150,6 +153,7 @@ class GexCSVExportTests(unittest.TestCase):
         )
         legacy = append_gex_overlays(BASE, {"call_wall_spx": 7000}, 17.0)
         self.assertIn("GEX Edge 0DTE", legacy)
+        self.assertIn('showGexLevels = input.bool(false,', legacy)
         self.assertIn("float gexCallES = 7017.00000000", legacy)
 
     def test_source_cannot_insert_pine(self):
