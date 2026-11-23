@@ -96,7 +96,7 @@ def append_csv_gex(code: str, report: dict, groups: dict, *,
         f"// Conversione: prezzo * {factor:.8f} + {shift:.8f}.",
         '_csvGexGroup = "GEX modellato da CSV Cboe · diagnostico"',
     ]
-    for name, suffix, enabled in (("0DTE", "0", "true"), ("Weekly", "W", "false")):
+    for name, suffix, enabled in (("0DTE", "0", "false"), ("Weekly", "W", "false")):
         if name not in groups:
             lines.append(f"// {name}: qualità insufficiente, livelli N/D ed esclusi.")
             continue
@@ -146,7 +146,7 @@ def append_csv_gex(code: str, report: dict, groups: dict, *,
                 # Come nel precedente overlay Edge: la label segue il bordo
                 # sinistro della finestra visibile anche dopo zoom/pan.
                 # Formatta ES a due decimali senza arrotondare al mintick.
-                f'            label lb = label.new(chart.left_visible_bar_time, {value_id}, "{caption} " + str.tostring({value_id}, "#.00"), xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 78), textcolor={pine_color}, size=size.small)',
+                f'            label lb = label.new(chart.left_visible_bar_time, {value_id}, "{caption} " + str.tostring({value_id}, "#.00"), xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 25), textcolor={pine_color}, size=size.normal)',
                 "            array.push(_csvGexDrawnLabels, lb)",
             ])
     lines.append("// FINE CSV-GEX-OVERLAY")
