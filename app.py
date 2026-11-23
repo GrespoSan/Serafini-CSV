@@ -119,11 +119,14 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
             # Qualsiasi errore GEX non blocca il NET GAMMA Serafini.
             csv_bytes = upload.getvalue()
             csv_sha256 = hashlib.sha256(csv_bytes).hexdigest()
-            st.session_state['csv_gex_current_source'] = {
-                'sha256': csv_sha256, 'symbol': symbol,
-            }
-            from csv_gex_panel import _cached_gex
+            from csv_gex_panel import (_cached_gex, _cached_occ,
+                                       OI_LABELS, DEFAULT_OI_LABEL)
             from csv_gex_pine import MODE_BY_LABEL
+            oi_label = st.session_state.get('csv_gex_oi_source', DEFAULT_OI_LABEL)
+            oi_mode = OI_LABELS.get(oi_label, 'auto')
+            st.session_state['csv_gex_current_source'] = {
+                'sha256': csv_sha256, 'symbol': symbol, 'oi_mode': oi_mode,
+            }
             iv_label = st.session_state.get(
                 'csv_gex_iv_units',
                 'Rilevamento automatico (blocco se IV ambigua)',
@@ -132,9 +135,40 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
             st.session_state['csv_gex_last_report'] = None
             st.session_state['csv_gex_last_error'] = None
             try:
-                gex_report = _cached_gex(csv_bytes, symbol, iv_mode)
+                if oi_mode == "csv":
+                    gex_report = _cached_gex(csv_bytes, symbol, iv_mode)
+                else:
+                    # Current OCC OI cannot legitimately overwrite an OLD CSV.
+                    # Do not hit the network until the capture date is checked.
+                    from datetime import timezone
+                    from cboe_csv_import import csv_to_snapshot
+                    from csv_gex_core.calendar import NY
+                    from csv_gex_oi import OiSourceError
+                    from csv_gex_core.models import parse_occ
+                    occ_values, occ_provenance, occ_error = None, None, None
+                    try:
+                        doc = csv_to_snapshot(csv_bytes, symbol)
+                        stamp = datetime.strptime(
+                            doc["timestamp"], "%Y-%m-%d %H:%M:%S"
+                        ).replace(tzinfo=timezone.utc)
+                        if stamp.astimezone(NY).date() != datetime.now(NY).date():
+                            raise OiSourceError(
+                                "CSV non della seduta odierna: OCC corrente "
+                                "non è un dato storico equivalente."
+                            )
+                        accepted = tuple(sorted(
+                            {str(item["option"]) for item in doc["data"]["options"]}
+                        ))
+                        occ_values, occ_provenance = _cached_occ(symbol, accepted)
+                    except (OiSourceError, ValueError, KeyError,
+                            RuntimeError, TimeoutError, OSError) as occ_exc:
+                        occ_error = str(occ_exc)[:230]
+                    gex_report = _cached_gex(
+                        csv_bytes, symbol, iv_mode, oi_mode,
+                        occ_values, occ_provenance, occ_error
+                    )
                 st.session_state['csv_gex_last_report'] = (
-                    (csv_sha256, symbol, iv_mode), gex_report,
+                    (csv_sha256, symbol, iv_mode, oi_mode), gex_report,
                 )
             except Exception as exc:
                 # Il codice del NET GAMMA non dipende dal modello GEX.
