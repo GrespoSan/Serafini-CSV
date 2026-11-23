@@ -675,6 +675,9 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
     asia_panel = {
         'day': day, 'c1_es': asia_c1, 'p1_es': asia_p1,
         'level_context': asia_level_context,
+        # Exact same ES-SPX basis already used for NET GAMMA and Pine.
+        # A missing basis must NOT be silently replaced by zero.
+        'es_spx_basis': offset if offset is not None and math.isfinite(offset) else None,
     }
 
     if offset is not None and all(computed_profiles.get(k, {}).get('rows') for k in ('0DTE', 'Weekly')):
