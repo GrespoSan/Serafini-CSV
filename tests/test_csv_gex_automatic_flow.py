@@ -5,6 +5,9 @@ The GEX mathematical/regime/quality gates are tested separately.
 """
 from pathlib import Path
 import unittest
+import ast
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -55,6 +58,41 @@ class AutoGexFlowTests(unittest.TestCase):
         for name, marker in markets.items():
             with self.subTest(market=name):
                 self.assertIn(marker, self.source(name))
+
+    def test_csv_cboe_time_is_source_utc_not_download_time(self):
+        # Isola l'helper puro senza importare Streamlit o scaricare snapshot.
+        source = self.source("gamma_section.py")
+        tree = ast.parse(source)
+        method = next(
+            item for item in tree.body
+            if isinstance(item, ast.FunctionDef)
+            and item.name == "_csv_cboe_capture_label"
+        )
+        namespace = {"datetime": datetime, "ZoneInfo": ZoneInfo}
+        exec(compile(ast.Module(body=[method], type_ignores=[]),
+                     "<csv_time_test>", "exec"), namespace)
+        caption = namespace["_csv_cboe_capture_label"]
+        snapshot = {
+            "timestamp": "2026-11-23 07:22:00",
+            "_import_provenance": {
+                "source": "CBOE_CSV_MANUAL_USER_EXPORT",
+                "timestamp_utc_converted": True,
+            },
+        }
+        self.assertEqual(
+            caption(snapshot), "Fotografia CSV Cboe · ore 08:22 Roma"
+        )
+        self.assertIsNone(caption({"timestamp": "2026-11-23 07:22:00"}))
+        bad = dict(snapshot, timestamp="not-a-time")
+        self.assertIn("ora fonte non verificabile", caption(bad))
+        self.assertIn(
+            "csv_capture_label if csv_capture_label is not None",
+            source,
+        )
+        self.assertIn(
+            "capture_info = (\n                csv_capture_label",
+            source,
+        )
 
     def test_same_csv_and_mode_are_mandatory_before_insertion(self):
         from csv_gex_pine import validate_result
