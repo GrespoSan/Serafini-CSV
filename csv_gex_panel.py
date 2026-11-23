@@ -9,7 +9,7 @@ from csv_gex_engine import analyze_csv_gex, MODEL_LABEL
 from csv_gex_price_display import gex_display_price, gex_price_label
 from csv_gex_oi import fetch_occ_oi
 from csv_gex_es_quote import fetch_es_quote
-from csv_gex_curve import curve_extrema
+from csv_gex_curve import curve_extrema, quote_inside_curve
 
 OI_LABELS = {
     "Auto · OCC se confrontabile, altrimenti CSV": "auto",
@@ -76,6 +76,10 @@ def _live_es_curve(report, spot, *, symbol, es_spx_basis, selected):
         else:
             st.caption("**Prezzo ES: N/D** — quotazione Yahoo non disponibile/aggiornata. "
                        "Nessun prezzo simulato con il differenziale ES−SPX.")
+    if symbol=="SPX" and quote and quote.get("price") is not None and not quote_inside_curve(
+            report,quote,symbol=symbol,es_spx_basis=es_spx_basis):
+        st.caption("La quotazione ES è fuori dal range ±10% della fotografia CSV: "
+                   "prezzo mostrato sopra ma linea esclusa per non alterare la scala.")
     st.plotly_chart(
         _curve_chart(report, spot, symbol=symbol,
                      es_spx_basis=es_spx_basis, es_quote=quote),
@@ -125,7 +129,7 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
                           line_dash="dash", line_color=color,
                           annotation_text=label, annotation_position="top")
     # Direct ES futures quote. NOT SPX spot + basis, not a GEX recalculation.
-    if symbol=="SPX" and es_quote and es_quote.get("price") is not None:
+    if quote_inside_curve(report,es_quote,symbol=symbol,es_spx_basis=es_spx_basis):
         price=float(es_quote["price"])
         fig.add_vline(
             x=price,line_dash="dashdot",line_width=2,
