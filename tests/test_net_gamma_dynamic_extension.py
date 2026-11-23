@@ -134,6 +134,9 @@ class ExtendedNetGammaTests(unittest.TestCase):
         self.assertIn("var array<float> weeklyLevels", code)
         self.assertIn("Mostra 0DTE", code)
         self.assertIn("MAX 200 per profilo", code)
+        # Nessun secondo gruppo GEX Edge quando la fonte è esclusivamente CSV.
+        self.assertNotIn("GEX Edge 0DTE", code)
+        self.assertNotIn("showGexLevels = input.bool", code)
 
 
 if __name__ == "__main__":
