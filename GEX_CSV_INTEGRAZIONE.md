@@ -30,7 +30,7 @@ Disponibili nel file importabile: ticker e codici OCC, strike, timestamp con fus
 
 Non verificabili dal CSV: data OI del singolo contratto, origine e latenza delle singole quote Alpaca, allineamento temporale IV/spot, stato OPRA vs indicative, posizioni dealer reali. **La qualità certificata rimane sempre falsa.**
 
-Per la visualizzazione diagnostica richiediamo almeno 20 contratti eleggibili, copertura valida almeno 95%, GEX misurabile almeno 98% nella banda ±5%, almeno 20 strike distinti validi, almeno 10 Call e 10 Put validi. In caso contrario tutti i livelli GEX sono N/D; nessun fallback a zero, interpolazione di strike o Gamma Cboe. I valori IV ambigui richiedono selezione esplicita dell'unità. OI vuoti sono trattati come mancanti, non come zero.
+La qualità diagnostica segue il gate Edge originale: servono almeno 20 contratti eleggibili, **copertura dell'esposizione GEX stimata almeno 98% nella banda ±5%, calcolata sul rapporto NON arrotondato**, almeno 20 strike distinti validi e almeno 10 Call + 10 Put validi. La copertura numerica di contratti al 95% è soltanto un **indicatore di completezza**, non un secondo gate: altrimenti, in una catena SPX con 360/387 contratti validi e GEX stimato quasi interamente coperto, si bloccherebbero erroneamente i livelli. Se la copertura GEX non è stimabile, il modello non passa. Non forziamo dati mancanti né inventiamo IV, strike, Gamma Flip o livelli; OI vuoti non sono trattati come zero.
 
 Il calendario XNYS è un **proxy di sessione**, non il settlement ufficiale OCC; le radici indice standard sono interpretate AM e le settimanali PM. In assenza di scadenze realmente nel CSV non generiamo livelli.
 
@@ -80,6 +80,28 @@ Test: **tests/test_csv_gex_pine.py** e **tests/test_csv_gex_automatic_flow.py**,
 Gamma Flip, scadenza mancante, rapporti di proiezione e integrità del
 codice NET GAMMA. La verifica automatica non equivale a una compilazione
 nel Pine Editor di TradingView.
+
+## Copertura grafica SPX e limiti Pine
+
+Il NET GAMMA SPX resta **25 strike sopra + 25 sotto la chiusura SPX**
+per tutte le analisi originali Serafini e per C1/P1. Solo per grafici
+Streamlit e Pine si possono usare **fino a 200 strike reali Cboe**
+per ciascuna scadenza 0DTE/Weekly, con fascia ex ante:
+minimo/massimo tra chiusura precedente e spot dello snapshot, più ±5%
+del riferimento; quando la cache M15 precedente certifica 27 barre
+RTH complete, si includono anche quegli estremi convertiti da ES.
+Nessun prezzo successivo allo snapshot entra nel profilo.
+
+Se gli strike reali superano la capacità, il campionamento include il
+nucleo 50, gli estremi reali della fascia, un numero limitato dei picchi
+NET GAMMA più intensi e strike distribuiti per prezzo. Si segnala
+l'eventuale esclusione; **non** si aggregano o interpolano valori.
+Nel Pine 200+200 strike richiedono al massimo 400 segmenti, con
+margine per le baselines, proiezioni e fino a sei linee GEX, entro il
+limite di 500 linee TradingView.
+
+Test dedicati: `tests/test_csv_gex_quality_gate.py` e
+`tests/test_net_gamma_dynamic_extension.py`.
 
 ## Test e gestione futura
 
