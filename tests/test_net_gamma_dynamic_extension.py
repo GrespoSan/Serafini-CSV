@@ -114,12 +114,13 @@ class ExtendedNetGammaTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "25\\+25"):
             gamma_component_totals([v0], require_core=True)
 
-    def test_app_summary_uses_core_not_graphical_rows(self):
+    def test_app_summary_uses_core_without_audit_panel(self):
         from pathlib import Path
         source = (Path(__file__).resolve().parents[1] /
                   "gamma_section.py").read_text(encoding="utf-8")
         self.assertIn("computed_profiles.values(), require_core=True", source)
-        self.assertIn("graphical_summary = gamma_component_totals(", source)
+        self.assertNotIn("Audit: differenza tra NET GAMMA originale e profili estesi", source)
+        self.assertNotIn("graphical_summary = gamma_component_totals(", source)
         self.assertNotIn("shown_rows = [row for p in shown_profiles", source)
 
     def test_pine_handles_200_per_profile(self):
