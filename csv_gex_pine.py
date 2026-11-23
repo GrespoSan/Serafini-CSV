@@ -57,7 +57,12 @@ def _finite_price(original, scale, basis):
 
 
 def _pine_price(price):
-    return "na" if price is None else f"{price:.8f}"
+    """Prezzo della linea presentato al centesimo, mai al tick ES/MES.
+
+    Il GEX BSM resta intatto nel report: cambia soltanto la precisione
+    grafica della proiezione Pine, coerente con il testo dell'etichetta.
+    """
+    return "na" if price is None else f"{price:.2f}"
 
 
 def append_csv_gex(code: str, report: dict, groups: dict, *,
@@ -87,6 +92,7 @@ def append_csv_gex(code: str, report: dict, groups: dict, *,
         "// Modello: Black-Scholes, OI (NO volume), Call + / Put -, USD per movimento spot dell'1%.",
         "// OI/IV non datati singolarmente: SOLO DIAGNOSTICO, non livelli operativi certificati.",
         "// I livelli sono STATICI alla fotografia; non vengono ricalcolati su TradingView.",
+        "// I prezzi GEX sono rappresentati a due decimali, non al tick futures.",
         f"// Conversione: prezzo * {factor:.8f} + {shift:.8f}.",
         '_csvGexGroup = "GEX modellato da CSV Cboe · diagnostico"',
     ]
@@ -137,7 +143,10 @@ def append_csv_gex(code: str, report: dict, groups: dict, *,
                 f"        if csvGexShow{suffix} and not na({value_id})",
                 f"            line gl = line.new(bar_index, {value_id}, bar_index + 1, {value_id}, xloc=xloc.bar_index, extend=extend.both, color={pine_color}, style={style}, width=2)",
                 "            array.push(_csvGexDrawnLines, gl)",
-                f'            label lb = label.new(bar_index, {value_id}, "{caption} " + str.tostring({value_id}, format.mintick), style=label.style_label_left, color=color.new(color.black, 78), textcolor={pine_color}, size=size.small)',
+                # Come nel precedente overlay Edge: la label segue il bordo
+                # sinistro della finestra visibile anche dopo zoom/pan.
+                # Formatta ES a due decimali senza arrotondare al mintick.
+                f'            label lb = label.new(chart.left_visible_bar_time, {value_id}, "{caption} " + str.tostring({value_id}, "#.00"), xloc=xloc.bar_time, yloc=yloc.price, style=label.style_label_left, color=color.new(color.black, 78), textcolor={pine_color}, size=size.small)',
                 "            array.push(_csvGexDrawnLabels, lb)",
             ])
     lines.append("// FINE CSV-GEX-OVERLAY")
