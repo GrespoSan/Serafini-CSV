@@ -34,7 +34,8 @@ class ExtendedNetGammaTests(unittest.TestCase):
         cls.core_week = profile(cls.snap, WEEK, 6000)
 
     def test_original_25plus25_untouched_even_if_visual_has_200(self):
-        v = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6000)
+        v = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6000,
+                           buffer_pct=.05)
         self.assertEqual(len(self.core_day["rows"]), 50)
         self.assertEqual(len(v["rows"]), 200)
         self.assertEqual(v["core_strikes"], 50)
@@ -54,7 +55,8 @@ class ExtendedNetGammaTests(unittest.TestCase):
         self.assertEqual(v["sampled_strikes"], 400)
 
     def test_current_snapshot_spot_and_previous_ref_change_target(self):
-        v = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6100)
+        v = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6100,
+                           buffer_pct=.05)
         self.assertAlmostEqual(v["requested_low"], 5700)
         self.assertAlmostEqual(v["requested_high"], 6400)
         self.assertTrue(v["coverage_complete"])
@@ -62,7 +64,7 @@ class ExtendedNetGammaTests(unittest.TestCase):
     def test_known_previous_rth_widens_target_but_never_fakes_strikes(self):
         v = visual_profile(
             self.snap, self.core_day, DAY, 6000, spot=6000,
-            known_low=5450, known_high=6450,
+            known_low=5450, known_high=6450, buffer_pct=.05,
         )
         self.assertAlmostEqual(v["requested_low"], 5150)
         self.assertAlmostEqual(v["requested_high"], 6750)
@@ -71,8 +73,79 @@ class ExtendedNetGammaTests(unittest.TestCase):
         self.assertEqual(max(r["strike_spx"] for r in v["rows"]), 6600)
         self.assertLessEqual(len(v["rows"]), 200)
 
+    def test_quiet_day_core_sufficient_and_no_other_options_read(self):
+        # Senza lista opzioni: se 25+25 bastano, nessun altro contratto
+        # viene letto o ricalcolato.
+        visual = visual_profile(
+            {}, self.core_day, DAY, 6000, spot=6003,
+            known_low=5995, known_high=6007,
+        )
+        self.assertEqual(visual["decision"], "50_sufficienti")
+        self.assertTrue(visual["coverage_complete"])
+        self.assertEqual(visual["band_mode"], "adattivo")
+        self.assertEqual(visual["extra_strikes"], 0)
+        self.assertEqual(visual["rows"], self.core_day["rows"])
+        self.assertEqual(visual["source_strikes_in_range"], 50)
+        self.assertEqual(visual["sampled_strikes"], 0)
+        self.assertGreaterEqual(visual["requested_low"], 5975)
+        self.assertLessEqual(visual["requested_high"], 6025)
+
+    def test_only_upper_side_extended_when_price_exceeds_core(self):
+        visual = visual_profile(
+            self.snap, self.core_day, DAY, 6000, spot=6030,
+        )
+        self.assertEqual(visual["decision"], "estesa_sopra")
+        self.assertFalse(visual["need_low"])
+        self.assertTrue(visual["need_high"])
+        self.assertEqual(visual["actual_low"], 5975)
+        self.assertEqual(visual["actual_high"], 6045)
+        self.assertEqual(visual["extra_strikes"], 20)
+        self.assertEqual(len(visual["rows"]), 70)
+        self.assertTrue(visual["coverage_complete"])
+
+    def test_only_lower_side_extended_when_prior_low_exceeds_core(self):
+        visual = visual_profile(
+            self.snap, self.core_day, DAY, 6000,
+            spot=6002, known_low=5960, known_high=6006,
+        )
+        self.assertEqual(visual["decision"], "estesa_sotto")
+        self.assertTrue(visual["need_low"])
+        self.assertFalse(visual["need_high"])
+        self.assertLess(visual["actual_low"], 5975)
+        self.assertEqual(visual["actual_high"], 6025)
+        self.assertTrue(visual["coverage_complete"])
+
+    def test_automatic_extension_preserves_pine_default_and_core_only_geometry(self):
+        quiet = visual_profile(
+            self.snap, self.core_day, DAY, 6000,
+            spot=6000, known_low=5990, known_high=6010,
+        )
+        quiet_week = visual_profile(
+            self.snap, self.core_week, WEEK, 6000,
+            spot=6000, known_low=5990, known_high=6010,
+        )
+        self.assertEqual(quiet["extra_strikes"], 0)
+        self.assertEqual(quiet_week["extra_strikes"], 0)
+        p0 = make_pine(
+            self.core_day, self.core_week, 40.0,
+            DAY.isoformat(), "2026-11-23 07:22:00",
+            current_only=True,
+        )
+        p1 = make_pine(
+            dict(self.core_day, display_rows=quiet["rows"]),
+            dict(self.core_week, display_rows=quiet_week["rows"]),
+            40.0, DAY.isoformat(), "2026-11-23 07:22:00",
+            current_only=True,
+        )
+        self.assertEqual(p0, p1)
+        self.assertIn(
+            'showExtension = input.bool(true, "Estensione automatica NET GAMMA")',
+            p1,
+        )
+
     def test_visual_extension_does_not_recalculate_gamma(self):
-        v = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6000)
+        v = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6000,
+                           buffer_pct=.05)
         for row in v["rows"]:
             self.assertAlmostEqual(
                 row["net_gamma"],
@@ -109,7 +182,7 @@ class ExtendedNetGammaTests(unittest.TestCase):
     def test_reject_noncanonical_rows_as_original_totals(self):
         v0 = visual_profile(
             self.snap, self.core_day, DAY, 6000,
-            spot=6000, max_strikes=200
+            spot=6000, max_strikes=200, buffer_pct=.05
         )
         with self.assertRaisesRegex(ValueError, "25\\+25"):
             gamma_component_totals([v0], require_core=True)
@@ -119,13 +192,18 @@ class ExtendedNetGammaTests(unittest.TestCase):
         source = (Path(__file__).resolve().parents[1] /
                   "gamma_section.py").read_text(encoding="utf-8")
         self.assertIn("computed_profiles.values(), require_core=True", source)
+        self.assertIn("max_strikes=200,  # margine adattivo", source)
+        self.assertNotIn("buffer_pct=.05, max_strikes=200", source)
+        self.assertIn("'Estensione intelligente NET GAMMA — solo grafici'", source)
         self.assertNotIn("Audit: differenza tra NET GAMMA originale e profili estesi", source)
         self.assertNotIn("graphical_summary = gamma_component_totals(", source)
         self.assertNotIn("shown_rows = [row for p in shown_profiles", source)
 
     def test_pine_handles_200_per_profile(self):
-        v0 = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6000)
-        vw = visual_profile(self.snap, self.core_week, WEEK, 6000, spot=6000)
+        v0 = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6000,
+                            buffer_pct=.05)
+        vw = visual_profile(self.snap, self.core_week, WEEK, 6000, spot=6000,
+                            buffer_pct=.05)
         a = dict(self.core_day, display_rows=v0["rows"])
         b = dict(self.core_week, display_rows=vw["rows"])
         code = make_pine(a, b, 40.0, DAY.isoformat(),
