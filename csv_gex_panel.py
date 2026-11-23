@@ -16,6 +16,16 @@ def _number(value):
     return f"{value:,.2f}" if value is not None else "N/D"
 
 
+def _gex_metric(column, label, value, *, negative=False, key=""):
+    """Colora solo il VALORE negativo; label e stile Streamlit restano intatti."""
+    if negative:
+        with column:
+            with st.container(key=f"csv_gex_negative_{key}"):
+                st.metric(label, value)
+    else:
+        column.metric(label, value)
+
+
 def _curve_chart(report, spot):
     grid = report["curve"]
     fig = go.Figure()
@@ -136,15 +146,42 @@ def render(payload: bytes | None, symbol: str | None) -> None:
         " I livelli non rappresentano posizioni dealer osservate e non sono "
         "segnali operativi."
     )
+    # Lo stile si applica SOLO ai valori negativi del modulo GEX,
+    # non alle etichette, ai livelli NET GAMMA o ai grafici.
+    st.html("""
+    <style>
+    [class*="st-key-csv_gex_negative_"] [data-testid="stMetricValue"],
+    [class*="st-key-csv_gex_negative_"] [data-testid="stMetricValue"] * {
+        color: #ff5b65 !important;
+    }
+    </style>
+    """)
     metrics = st.columns(4)
-    metrics[0].metric("Call Wall", _number(report["call_wall"]))
-    metrics[1].metric("Put Wall", _number(report["put_wall"]))
-    metrics[2].metric("Gamma Flip", _number(report["flip"]))
-    metrics[3].metric("Regime GEX modellato", report["regime"].upper())
+    for column, field, label, suffix in (
+        (metrics[0], "call_wall", "Call Wall", "call_wall"),
+        (metrics[1], "put_wall", "Put Wall", "put_wall"),
+        (metrics[2], "flip", "Gamma Flip", "flip"),
+    ):
+        value = report[field]
+        _gex_metric(
+            column, label, _number(value),
+            negative=value is not None and value < 0, key=suffix,
+        )
+    _gex_metric(
+        metrics[3], "Regime GEX modellato", report["regime"].upper(),
+        negative=report["regime"].lower() == "negative", key="regime",
+    )
     a, b, c = st.columns(3)
-    a.metric("NET GEX · mld USD / 1%", f"{report['net_gex']/1e9:+.3f}")
-    b.metric("CALL GEX · mld USD / 1%", f"{report['call_gex']/1e9:+.3f}")
-    c.metric("PUT GEX · mld USD / 1%", f"{report['put_gex']/1e9:+.3f}")
+    for column, field, label, suffix in (
+        (a, "net_gex", "NET GEX · mld USD / 1%", "net"),
+        (b, "call_gex", "CALL GEX · mld USD / 1%", "call"),
+        (c, "put_gex", "PUT GEX · mld USD / 1%", "put"),
+    ):
+        value = report[field]
+        _gex_metric(
+            column, label, f"{value/1e9:+.3f}",
+            negative=value < 0, key=suffix,
+        )
     st.caption(
         "Scenario prezzo: 201 punti, ±10% dallo spot; IV, OI e tempo "
         "alla scadenza T congelati. Gamma BSM r=q=0; "
