@@ -9,6 +9,7 @@ from csv_gex_engine import analyze_csv_gex, MODEL_LABEL
 from csv_gex_price_display import gex_display_price, gex_price_label
 from csv_gex_oi import fetch_occ_oi
 from csv_gex_es_quote import fetch_es_quote
+from csv_gex_curve import curve_extrema
 
 OI_LABELS = {
     "Auto · OCC se confrontabile, altrimenti CSV": "auto",
@@ -54,32 +55,6 @@ def _gex_metric(column, label, value, *, negative=False, key=""):
                 st.metric(label, value)
     else:
         column.metric(label, value)
-
-
-def curve_extrema(report, *, symbol, es_spx_basis=None):
-    """Global extrema on the EXISTING 201-point theoretical curve.
-
-    Not the maximum/minimum strike or a forecast. If there are equal
-    values, the closest scenario to current spot wins deterministically.
-    """
-    curve=report.get("curve") or []
-    values=[]
-    for row in curve:
-        try:
-            price=gex_display_price(row["spot"],symbol,es_spx_basis)
-            gex=float(row["net_gex"])
-            if price is None or not math.isfinite(gex):
-                return None
-            values.append((price,gex))
-        except (ValueError,TypeError,KeyError,OverflowError):
-            return None
-    if len(values)<2:
-        return None
-    center=values[len(values)//2][0]
-    high=max(values,key=lambda p:(p[1],-abs(p[0]-center)))
-    low=min(values,key=lambda p:(p[1],abs(p[0]-center)))
-    return {"maximum":{"price":high[0],"gex":high[1]},
-            "minimum":{"price":low[0],"gex":low[1]}}
 
 
 @st.fragment(run_every=60)
