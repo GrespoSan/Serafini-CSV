@@ -2,7 +2,7 @@
 import unittest
 from datetime import date
 
-from net_gamma import profile, visual_profile
+from net_gamma import profile, visual_profile, gamma_component_totals
 from pine_export import make_pine
 
 DAY = date(2026, 11, 23)
@@ -78,6 +78,49 @@ class ExtendedNetGammaTests(unittest.TestCase):
                 row["net_gamma"],
                 row["call_gamma_component"] - row["put_gamma_component"],
             )
+
+    def test_canonical_totals_do_not_change_with_graphical_extension(self):
+        core = gamma_component_totals(
+            [self.core_day, self.core_week], require_core=True
+        )
+        self.assertEqual(core["strikes"], 100)
+        self.assertEqual(core["profiles"], 2)
+        self.assertAlmostEqual(core["net"], core["call"] - core["put"])
+        for cap, margin in ((50, .025), (140, .025), (200, .05)):
+            with self.subTest(strikes=cap, margin=margin):
+                v0 = visual_profile(
+                    self.snap, self.core_day, DAY, 6000,
+                    spot=6000, buffer_pct=margin, max_strikes=cap
+                )
+                vw = visual_profile(
+                    self.snap, self.core_week, WEEK, 6000,
+                    spot=6000, buffer_pct=margin, max_strikes=cap
+                )
+                # Il riepilogo canonico deriva soltanto da computed_profiles.
+                actual = gamma_component_totals(
+                    [self.core_day, self.core_week], require_core=True
+                )
+                self.assertEqual(actual, core)
+                # La somma delle righe visualizzate cambia, ma è audit separato.
+                vis = gamma_component_totals([v0, vw])
+                self.assertEqual(vis["strikes"], 2 * cap)
+                self.assertAlmostEqual(vis["net"], vis["call"] - vis["put"])
+
+    def test_reject_noncanonical_rows_as_original_totals(self):
+        v0 = visual_profile(
+            self.snap, self.core_day, DAY, 6000,
+            spot=6000, max_strikes=200
+        )
+        with self.assertRaisesRegex(ValueError, "25\\+25"):
+            gamma_component_totals([v0], require_core=True)
+
+    def test_app_summary_uses_core_not_graphical_rows(self):
+        from pathlib import Path
+        source = (Path(__file__).resolve().parents[1] /
+                  "gamma_section.py").read_text(encoding="utf-8")
+        self.assertIn("computed_profiles.values(), require_core=True", source)
+        self.assertIn("graphical_summary = gamma_component_totals(", source)
+        self.assertNotIn("shown_rows = [row for p in shown_profiles", source)
 
     def test_pine_handles_200_per_profile(self):
         v0 = visual_profile(self.snap, self.core_day, DAY, 6000, spot=6000)
