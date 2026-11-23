@@ -18,6 +18,7 @@ on:
       - csv_gex_core/**
       - cboe_csv_import.py
       - tests/test_csv_gex_integration.py
+      - tests/test_csv_gex_iv_inference.py
       - tests/test_csv_gex_pine.py
       - tests/test_csv_gex_automatic_flow.py
       - .github/workflows/csv-gex-tests.yml
@@ -41,6 +42,8 @@ jobs:
         run: python -m compileall -q csv_gex_core csv_gex_engine.py csv_gex_panel.py csv_gex_pine.py mercati/pine_ui.py gamma_section.py pine_export.py mercati/v2_market_engine.py mercati/v2_index_market_view.py mercati/gld_cboe_view.py mercati/uso_cboe_view.py mercati/v2_universal_cboe.py cboe_csv_import.py app.py
       - name: Golden Edge formulas and CSV source/quality regression
         run: python -m unittest discover -s tests -p test_csv_gex_integration.py -v
+      - name: IV auto recognition with outlier and mixed-unit regression
+        run: python -m unittest discover -s tests -p test_csv_gex_iv_inference.py -v
       - name: Pine GEX controls, source identity, no data fabrication and price conversion
         run: python -m unittest discover -s tests -p test_csv_gex_pine.py -v
       - name: Single CSV automatic GEX and Pine integration
