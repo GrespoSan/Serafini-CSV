@@ -84,13 +84,23 @@ nel Pine Editor di TradingView.
 ## Copertura grafica SPX e limiti Pine
 
 Il NET GAMMA SPX resta **25 strike sopra + 25 sotto la chiusura SPX**
-per tutte le analisi originali Serafini e per C1/P1. Solo per grafici
-Streamlit e Pine si possono usare **fino a 200 strike reali Cboe**
-per ciascuna scadenza 0DTE/Weekly, con fascia ex ante:
-minimo/massimo tra chiusura precedente e spot dello snapshot, più ±5%
-del riferimento; quando la cache M15 precedente certifica 27 barre
-RTH complete, si includono anche quegli estremi convertiti da ES.
-Nessun prezzo successivo allo snapshot entra nel profilo.
+per tutte le analisi originali Serafini e per C1/P1. L'opzione
+**Estensione intelligente NET GAMMA** resta ON di default in Streamlit
+e in TradingView, ma NON aggiunge strike quando il nucleo originale
+copre già il range noto e il margine di sicurezza.
+
+La fascia ex ante considera la chiusura precedente e lo spot del CSV;
+quando la cache M15 precedente certifica 27 barre RTH complete, include
+anche quegli estremi convertiti da ES con basis verificato. Il margine
+è adattivo: massimo tra 0,25% del riferimento, due passi mediani
+degli strike e 20% dell'escursione dei prezzi già noti, con tetto
+massimo di 1% del riferimento. Se i 50 strike coprono la fascia,
+si usano ESATTAMENTE i 50 originali nel grafico e nel Pine.
+
+Quando non bastano, vengono aggiunti solo strike reali Cboe sul
+lato scoperto (o su entrambi se necessario), fino a **200 strike per
+scadenza** 0DTE/Weekly. Il calcolo principale NET GAMMA/C1/P1 resta
+sempre sul nucleo 25+25. Non entrano prezzi successivi allo snapshot.
 
 Se gli strike reali superano la capacità, il campionamento include il
 nucleo 50, gli estremi reali della fascia, un numero limitato dei picchi
