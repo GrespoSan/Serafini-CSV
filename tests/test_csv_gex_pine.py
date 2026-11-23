@@ -49,8 +49,8 @@ class GexCSVExportTests(unittest.TestCase):
         result = append_csv_gex(BASE, report, allowed)
         self.assertTrue(result.startswith(BASE))
         self.assertIn("var array<float> netGammaOriginal = array.from(10.0, -20.0)", result)
-        self.assertIn("float _csvGex0Call = 102.25000000", result)
-        self.assertIn("float _csvGexWPut = 90.00000000", result)
+        self.assertIn("float _csvGex0Call = 102.25", result)
+        self.assertIn("float _csvGexWPut = 90.00", result)
         self.assertIn('input.bool(true, "Mostra GEX 0DTE"', result)
         self.assertIn('input.bool(false, "Mostra GEX Weekly"', result)
         self.assertIn('if validTicker', result)
@@ -61,8 +61,8 @@ class GexCSVExportTests(unittest.TestCase):
         saved, source = fixture(only="0DTE")
         report, allowed = validate_result(saved, source, "decimal")
         projected = append_csv_gex(BASE, report, allowed, price_factor=100.0, price_shift=40.0)
-        self.assertIn("float _csvGex0Call = 10265.00000000", projected)
-        self.assertIn("float _csvGex0Put = 9790.00000000", projected)
+        self.assertIn("float _csvGex0Call = 10265.00", projected)
+        self.assertIn("float _csvGex0Put = 9790.00", projected)
         self.assertNotIn("float _csvGexWCall", projected)
         self.assertIn("Weekly: qualità insufficiente", projected)
 
@@ -70,14 +70,14 @@ class GexCSVExportTests(unittest.TestCase):
         saved, source = fixture(only="0DTE")
         report, allowed = validate_result(saved, source, "decimal")
         projected = append_csv_gex(BASE, report, allowed, price_factor=10.0)
-        self.assertIn("float _csvGex0Call = 1022.50000000", projected)
+        self.assertIn("float _csvGex0Call = 1022.50", projected)
 
     def test_no_gamma_flip_means_no_line(self):
         saved, source = fixture(only="0DTE", flip=False)
         report, allowed = validate_result(saved, source, "decimal")
         output = append_csv_gex(BASE, report, allowed)
         self.assertIn("float _csvGex0Flip = na", output)
-        self.assertNotIn('label lb = label.new(bar_index, _csvGex0Flip', output)
+        self.assertNotIn('label lb = label.new(chart.left_visible_bar_time, _csvGex0Flip', output)
 
     def test_mismatched_source_mode_symbol_all_rejected(self):
         saved, source = fixture()
@@ -123,6 +123,34 @@ class GexCSVExportTests(unittest.TestCase):
             append_csv_gex(BASE, report, allowed, price_shift=float("nan"))
         with self.assertRaises(ValueError):
             append_csv_gex('//@version=6\nindicator("Bad")', report, allowed)
+
+    def test_gex_labels_left_and_exact_es_price_no_tick_rounding(self):
+        saved, source = fixture()
+        report, allowed = validate_result(saved, source, "decimal")
+        allowed["0DTE"]["flip"] = 7092.46
+        output = append_csv_gex(BASE, report, allowed, price_shift=17.0)
+        # 7092.46 + 17 = 7109.46; TradingView format.mintick
+        # would incorrectly display 7109.50 on ES/MES.
+        self.assertIn("float _csvGex0Flip = 7109.46", output)
+        self.assertIn('str.tostring(_csvGex0Flip, "#.00")', output)
+        self.assertNotIn("format.mintick", output)
+        self.assertEqual(output.count("label.new(chart.left_visible_bar_time"), 6)
+        self.assertIn("xloc=xloc.bar_time, yloc=yloc.price", output)
+        self.assertIn("style=label.style_label_left", output)
+        self.assertIn("extend=extend.both", output)
+
+    def test_legacy_edge_group_omitted_when_no_edge_data(self):
+        from pine_gex_overlay import append_gex_overlays
+        self.assertEqual(append_gex_overlays(BASE, None, 17.0), BASE)
+        self.assertEqual(append_gex_overlays(BASE, {}, 17.0), BASE)
+        self.assertEqual(
+            append_gex_overlays(BASE, {
+                "call_wall_spx": None, "put_wall_spx": None, "gamma_flip_spx": None,
+            }, 17.0), BASE,
+        )
+        legacy = append_gex_overlays(BASE, {"call_wall_spx": 7000}, 17.0)
+        self.assertIn("GEX Edge 0DTE", legacy)
+        self.assertIn("float gexCallES = 7017.00000000", legacy)
 
     def test_source_cannot_insert_pine(self):
         saved, source = fixture()
