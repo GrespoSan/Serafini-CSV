@@ -19,6 +19,7 @@ from cboe_csv_import import csv_to_snapshot, _get_csv_fields, InvalidCboeCSV
 from csv_gex_core import gex, config
 from csv_gex_core.calendar import Session, TradingCalendar, NY
 from csv_gex_core.models import Contract, parse_occ
+from csv_gex_oi import apply_mode
 from volatility_levels import weekly_expiry
 
 ROME = ZoneInfo("Europe/Rome")
@@ -327,8 +328,10 @@ def _report(expiry: date, name: str, prepared: list[Contract],
     return basic
 
 
-def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto") -> dict:
-    """Analizza SOLO il CSV caricato; calcoli locali senza servizi o dati esterni."""
+def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto", *,
+                    oi_mode="csv", occ_values=None, occ_provenance=None,
+                    occ_error=None) -> dict:
+    """Motore GEX locale: CSV immutabile, OI OCC opzionale e tracciato."""
     if symbol is None or not isinstance(symbol, str):
         raise ValueError("Ticker CSV mancante.")
     doc = csv_to_snapshot(blob, symbol)
@@ -352,13 +355,21 @@ def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto") -> dict:
         spot=spot, captured=captured, cal=cal, target_expiries=target,
     )
     contract_list = _from_snapshot(doc, presence, unit)
+    contract_list, oi_info = apply_mode(
+        contract_list, mode=oi_mode, captured=captured,
+        target_expiries=target, spot=spot,
+        occ=occ_values, provenance=occ_provenance, fetch_error=occ_error,
+    )
     prepared = gex.finalize(contract_list, spot, captured, cal)
     reports = {}
     for name, expiry in target.items():
         reports[name] = _report(
             expiry, name, prepared, spot, symbol,
-            "OI del CSV senza data certificata; IV/quotazioni non sincronizzate "
-            "con feed Alpaca. Risultato NON certificato, solo studio.",
+            (("OI OCC Series Search: data OI non pubblicata; "
+              if oi_info["effective_source"] == "OCC_SERIES_SEARCH"
+              else "OI del CSV senza data certificata; ") +
+             "IV/quotazioni del CSV non sincronizzate con feed Alpaca. "
+             "Risultato NON certificato, solo studio."),
         )
     if unit is None:
         for report in reports.values():
@@ -376,6 +387,8 @@ def analyze_csv_gex(blob: bytes, symbol: str, iv_mode="auto") -> dict:
         "timestamp_utc": captured.isoformat(),
         "timestamp_rome": captured.astimezone(ROME).strftime("%d/%m/%Y %H:%M:%S"),
         "spot": spot, "iv_unit": unit, "iv_note": unit_note,
+        "oi_info": oi_info,
+        "oi_missing_effective": sum(c.oi is None for c in contract_list),
         "csv_contracts": len(contract_list), "oi_missing": sum(
             not presence.get(c.symbol, {}).get("oi") for c in contract_list
         ),
