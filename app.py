@@ -160,7 +160,12 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
 with st.expander("ANALISI GEX · Edge-style da CSV — modulo indipendente", expanded=False):
     try:
         from csv_gex_panel import render as render_csv_gex
-        render_csv_gex(upload.getvalue() if upload is not None else None, symbol)
+        render_csv_gex(
+            upload.getvalue() if upload is not None else None,
+            symbol,
+            es_spx_basis=(asia_panel.get('es_spx_basis')
+                          if market == "SP500" and asia_panel is not None else None),
+        )
     except Exception as exc:
         st.error("Modulo GEX separato non disponibile: " + type(exc).__name__ +
                  ". Le analisi NET GAMMA precedenti restano utilizzabili.")
