@@ -5,7 +5,7 @@ from datetime import date
 from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
-from net_gamma import profile, read_snapshot, visual_profile
+from net_gamma import profile, read_snapshot, visual_profile, gamma_component_totals
 from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
 from gamma_scale import profile_gamma_bounds, gamma_components
@@ -405,14 +405,16 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                    ' · margine 5% SPX · massimo 200 strike reali/scadenza. '
                    'Con limiti di capacità vengono selezionati strike '
                    'rappresentativi senza aggregare il NET GAMMA.')
-    # Solo riepilogo visivo NET / CALL / PUT delle scadenze mostrate.
-    # Non modifica profili, selezione 25+25, Gamma, grafici o Pine.
-    shown_profiles = [p for p in visual_profiles.values() if p.get('rows')]
-    if shown_profiles:
-        shown_rows = [row for p in shown_profiles for row in p['rows']]
-        net_summary = sum(float(row['net_gamma']) for row in shown_rows)
-        call_summary = sum(float(row['call_gamma_component']) for row in shown_rows)
-        put_summary = sum(float(row['put_gamma_component']) for row in shown_rows)
+    # Riepilogo CANONICO: solo profili Serafini 25+25, non gli strike
+    # selezionati per la grafica. Il valore NON cambia attivando
+    # l'estensione, la sua copertura o il suo limite (140/200).
+    core_summary = gamma_component_totals(
+        computed_profiles.values(), require_core=True
+    )
+    if core_summary is not None:
+        net_summary = core_summary['net']
+        call_summary = core_summary['call']
+        put_summary = core_summary['put']
 
         def _gamma_it(value, signed=False):
             formatted = f'{value:+,.2f}' if signed else f'{value:,.2f}'
@@ -423,15 +425,47 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             net_color = '#f05252' if net_summary < 0 else '#f1f5f9'
             st.markdown(
                 '<div style="font-size:0.88rem;color:#d1d5db;'
-                'margin-bottom:0.35rem">NET GAMMA · Call − Put</div>'
+                'margin-bottom:0.35rem">NET GAMMA · Call − Put · 25+25</div>'
                 f'<div style="font-size:1.85rem;line-height:1.25;'
                 f'font-weight:400;color:{net_color};font-variant-numeric:tabular-nums">'
                 f'{_gamma_it(net_summary, signed=True)}</div>',
                 unsafe_allow_html=True,
             )
-        call_col.metric('GAMMA CALL (+)',
+        call_col.metric('GAMMA CALL (+) · 25+25',
                         _gamma_it(call_summary, signed=True))
-        put_col.metric('GAMMA PUT (−)', '−' + _gamma_it(put_summary))
+        put_col.metric('GAMMA PUT (−) · 25+25',
+                       '−' + _gamma_it(put_summary))
+        st.caption(
+            f"**Totali originali Serafini:** {core_summary['profiles']} scadenze, "
+            f"{core_summary['strikes']} strike (25 sopra e 25 sotto per scadenza). "
+            "L'estensione dinamica modifica solo i grafici, mai questi totali."
+        )
+        if show_visual_extension:
+            graphical_summary = gamma_component_totals(visual_profiles.values())
+            if graphical_summary is not None:
+                with st.expander(
+                    'Audit: differenza tra NET GAMMA originale e profili estesi',
+                    expanded=False,
+                ):
+                    st.caption(
+                        "Il vecchio riepilogo usava per errore gli strike "
+                        "visivi: cambiando da 140 a 200, cambiava anche il totale. "
+                        "La cifra estesa sotto è solo diagnostica e NON "
+                        "sostituisce il totale 25+25 Serafini."
+                    )
+                    col_core, col_graph, col_delta = st.columns(3)
+                    col_core.metric(
+                        f"Nucleo 25+25 · {core_summary['strikes']} strike",
+                        _gamma_it(net_summary, signed=True),
+                    )
+                    col_graph.metric(
+                        f"Solo grafici · {graphical_summary['strikes']} strike",
+                        _gamma_it(graphical_summary['net'], signed=True),
+                    )
+                    col_delta.metric(
+                        "Differenza da strike aggiuntivi",
+                        _gamma_it(graphical_summary['net'] - net_summary, signed=True),
+                    )
     shared_bounds = profile_gamma_bounds(visual_profiles.values())
     st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
                'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
