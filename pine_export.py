@@ -65,8 +65,8 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
         if len(group['rows']) != 50:
             raise ValueError('Il profilo Serafini originale deve restare 25+25')
         visual = group.get('display_rows') or group['rows']
-        if not 50 <= len(visual) <= 140:
-            raise ValueError('Il Pine visivo ammette 50-140 strike per profilo')
+        if not 50 <= len(visual) <= 200:
+            raise ValueError('Il Pine visivo ammette 50-200 strike per profilo')
         core = {float(x['strike_spx']): float(x['net_gamma'])
                 for x in group['rows']}
         extended = {float(x['strike_spx']): float(x['net_gamma'])
@@ -77,6 +77,9 @@ def make_pine(odte: dict, weekly: dict, offset: float, date_text: str, cboe_stam
             raise ValueError('Gli strike estesi devono contenere i 50 originali invariati')
     odte_display = odte.get('display_rows') or odte['rows']
     weekly_display = weekly.get('display_rows') or weekly['rows']
+    # Budget linee TradingView: 200 0DTE + 200 Weekly + 2 baselines +
+    # 6 proiezioni NET GAMMA + fino a 6 GEX = massimo circa 414 (< 500).
+    # Le linee sono riutilizzate all'ultima barra; nessun dato interpolato.
     # Dotted/dashed horizontal projections rank ONLY the same 0DTE bars that
     # the chosen histogram mode displays. Weekly never supplies a top level.
     top_call_full = _top_gamma_rows(odte_display, positive=True)
@@ -134,7 +137,7 @@ indicator("{indicator_title}", overlay=true, max_lines_count=500, max_labels_cou
 {clock_note}// Data snapshot: {date_text} | 0DTE: {odte['expiry']} | Weekly: {weekly['expiry']}
 // Differenziale ES-SPX GIA' APPLICATO agli strike: {offset:.4f}
 // Formula originale: (OI_CALL+VOL_CALL)*GAMMA_CALL - (OI_PUT+VOL_PUT)*GAMMA_PUT.
-// Metodo Serafini INVARIATO: 25 strike SOPRA e 25 SOTTO per C1/P1 e analisi.\n// Estensione grafica: strike Cboe veri della stessa fotografia, MAX 140 per profilo; non modifica i 50 originali.
+// Metodo Serafini INVARIATO: 25 strike SOPRA e 25 SOTTO per C1/P1 e analisi.\n// Estensione grafica: strike Cboe veri della stessa fotografia, MAX 200 per profilo; non modifica i 50 originali.
 // Profili graficamente separati come slide 139: 0DTE vicino alle candele, Weekly piu' a destra.
 {warning}// Scala MANUALE, unica per tutti i profili e mai adattata dal codice.
 // Se la scala selezionata supera il limite grafico di TradingView (+500 barre),
