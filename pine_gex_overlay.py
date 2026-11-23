@@ -6,6 +6,12 @@ def append_gex_overlays(code, levels, offset):
     """Customize styles without recalculating Wall/Flip inside TradingView."""
     if not isfinite(float(offset)):
         raise ValueError("Differenziale ES-SPX non valido")
+    # Il Pine CSV genera il GEX dal proprio report verificato. Non aggiungere
+    # il vecchio gruppo Edge 0DTE quando non sono stati forniti livelli Edge:
+    # le tre variabili 'na' e i controlli duplicati confondono l'utente.
+    if not levels or not any(levels.get(k) is not None for k in (
+            "call_wall_spx", "put_wall_spx", "gamma_flip_spx")):
+        return code
     if "showGexLevels = input.bool" in code:
         raise ValueError("Blocco GEX già presente")
 
