@@ -236,6 +236,45 @@ def visual_profile(snapshot: dict, base: dict, expiry: date, reference: float,
     }
 
 
+
+def gamma_component_totals(profiles, *, require_core=False):
+    """Somme delle stesse righe richieste, senza estendere l'universo implicitamente.
+
+    Restituisce le componenti Serafini call e put (entrambe positive prima
+    della sottrazione) e il NET GAMMA. Il NET principale usa require_core=True:
+    ogni scadenza presente deve avere esattamente 25+25 righe.
+    La stessa funzione può documentare, separatamente, la somma puramente
+    grafica degli strike estesi.
+    """
+    from math import fsum, isfinite, isclose
+    rows = []
+    included = 0
+    for group in profiles:
+        items = list(group.get("rows") or [])
+        if not items:
+            continue
+        if require_core and (len(items) != 50 or len({
+                float(item["strike_spx"]) for item in items}) != 50):
+            raise ValueError("Totale Serafini: attesi 25+25 strike per scadenza")
+        rows.extend(items)
+        included += 1
+    if not rows:
+        return None
+    calls = [float(row["call_gamma_component"]) for row in rows]
+    puts = [float(row["put_gamma_component"]) for row in rows]
+    nets = [float(row["net_gamma"]) for row in rows]
+    if not all(isfinite(v) for v in calls + puts + nets):
+        raise ValueError("Somma NET GAMMA non finita")
+    net = fsum(nets)
+    call = fsum(calls)
+    put = fsum(puts)
+    if not isclose(net, call - put, rel_tol=1e-10, abs_tol=1e-7):
+        raise ValueError("NET GAMMA diverso da Call - Put sulle righe selezionate")
+    return {"net": net, "call": call, "put": put, "strikes": len(rows),
+            "profiles": included}
+
+
+
 def profile_csv(result, offset=None):
     import csv
     out = io.StringIO(); columns = ['strike_spx', 'strike_es', 'net_gamma', 'call_gamma_component',
