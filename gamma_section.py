@@ -473,7 +473,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             st.caption(f"{result['contracts']} contratti · {result['available_strikes']} strike disponibili · "
                        f"{len(result['rows'])} originali (25+25)"
                        + (f" + {extra_count} estesi solo per il grafico" if extra_count else ""))
-            if extra_count:
+            if show_visual_extension and visual.get('requested_low') is not None:
                 covered = bool(visual.get('coverage_complete'))
                 omitted = visual.get('sampled_strikes', 0)
                 st.caption(
