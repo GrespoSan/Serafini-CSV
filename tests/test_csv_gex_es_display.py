@@ -42,7 +42,10 @@ class GEXOnlyESTests(unittest.TestCase):
         self.assertIn("gex_display_price(report[field], symbol, es_spx_basis)", panel)
         self.assertIn('gex_display_price(row["spot"], symbol, es_spx_basis)', panel)
         self.assertIn('gex_display_price(r["strike"], symbol, es_spx_basis)', panel)
-        self.assertIn("if basis_available:\n        st.plotly_chart(", panel)
+        self.assertIn("if basis_available:\n        extremes=curve_extrema(", panel)
+        self.assertIn("_live_es_curve(", panel)
+        self.assertIn("fig.add_vline(", panel)
+        self.assertIn("ES {price:,.2f}", panel)
         self.assertIn("**Livelli esclusivamente ES/MES**", panel)
 
 
