@@ -14,7 +14,7 @@ from zoneinfo import ZoneInfo
 
 from csv_gex_oi import parse_series,fetch_occ_oi,apply_mode,OiSourceError
 from csv_gex_es_quote import front_symbol,parse_chart,fetch_es_quote
-from csv_gex_curve import curve_extrema
+from csv_gex_curve import curve_extrema, quote_inside_curve
 from csv_gex_engine import analyze_csv_gex
 from cboe_csv_import import csv_to_snapshot
 
@@ -130,6 +130,17 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(result["maximum"],{"price":118,"gex":8.2e9})
         self.assertEqual(result["minimum"],{"price":117,"gex":-7.3e9})
         self.assertIsNone(curve_extrema({"curve":rows},symbol="SPX"))
+
+    def test_actual_es_outside_historical_curve_is_not_plotted(self):
+        report={"curve":[{"spot":100,"net_gex":-1e9},
+                         {"spot":101,"net_gex":2e9},
+                         {"spot":102,"net_gex":1e9}]}
+        self.assertFalse(quote_inside_curve(report,{"price":7260},
+                         symbol="SPX",es_spx_basis=17))
+        self.assertTrue(quote_inside_curve(report,{"price":118},
+                         symbol="SPX",es_spx_basis=17))
+        self.assertFalse(quote_inside_curve(report,{"price":118},
+                         symbol="SPX",es_spx_basis=None))
 
     def test_es_contract_and_quote_clock_with_fallback(self):
         self.assertEqual(front_symbol(date(2026,11,23)),"ESZ26.CME")
