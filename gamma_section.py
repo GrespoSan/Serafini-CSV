@@ -440,32 +440,6 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             f"{core_summary['strikes']} strike (25 sopra e 25 sotto per scadenza). "
             "L'estensione dinamica modifica solo i grafici, mai questi totali."
         )
-        if show_visual_extension:
-            graphical_summary = gamma_component_totals(visual_profiles.values())
-            if graphical_summary is not None:
-                with st.expander(
-                    'Audit: differenza tra NET GAMMA originale e profili estesi',
-                    expanded=False,
-                ):
-                    st.caption(
-                        "Il vecchio riepilogo usava per errore gli strike "
-                        "visivi: cambiando da 140 a 200, cambiava anche il totale. "
-                        "La cifra estesa sotto è solo diagnostica e NON "
-                        "sostituisce il totale 25+25 Serafini."
-                    )
-                    col_core, col_graph, col_delta = st.columns(3)
-                    col_core.metric(
-                        f"Nucleo 25+25 · {core_summary['strikes']} strike",
-                        _gamma_it(net_summary, signed=True),
-                    )
-                    col_graph.metric(
-                        f"Solo grafici · {graphical_summary['strikes']} strike",
-                        _gamma_it(graphical_summary['net'], signed=True),
-                    )
-                    col_delta.metric(
-                        "Differenza da strike aggiuntivi",
-                        _gamma_it(graphical_summary['net'] - net_summary, signed=True),
-                    )
     shared_bounds = profile_gamma_bounds(visual_profiles.values())
     st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
                'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
