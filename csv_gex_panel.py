@@ -497,19 +497,6 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
                            f"NET GEX {point['gex']/1e9:+.3f} mld USD / 1%")
             st.caption("Massimo e minimo globali dei 201 punti della curva "
                        "teorica nel range ±10%: non sono previsioni né strike.")
-        st.subheader("Curva teorica GEX · scenario prezzo")
-        st.caption(
-            "Legenda nella parte superiore: curva azzurra, spot della "
-            "fotografia, Call Wall, Put Wall, Gamma Flip e prezzo ES Yahoo "
-            "quando disponibile. Le linee sono riferimenti di prezzo, "
-            "non previsioni del percorso futuro."
-        )
-        _live_es_curve(
-            report,info["spot"],symbol=symbol,
-            es_spx_basis=es_spx_basis,selected=selected,
-        )
-
-        st.divider()
         st.subheader("GEX by Strike · composizione Call / Put")
         st.caption(
             "**PUTS − a sinistra (viola)** · **CALLS + a destra (verde)**. "
@@ -551,3 +538,16 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
                 + ", ".join(meta["offscreen_levels"])
                 + ". I livelli rimangono calcolati e non vengono modificati."
             )
+
+        st.divider()
+        st.subheader("Curva teorica GEX · scenario prezzo")
+        st.caption(
+            "Legenda nella parte superiore: curva azzurra, spot della "
+            "fotografia, Call Wall, Put Wall, Gamma Flip e prezzo ES Yahoo "
+            "quando disponibile. Le linee sono riferimenti di prezzo, "
+            "non previsioni del percorso futuro."
+        )
+        _live_es_curve(
+            report,info["spot"],symbol=symbol,
+            es_spx_basis=es_spx_basis,selected=selected,
+        )
