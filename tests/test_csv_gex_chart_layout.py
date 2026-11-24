@@ -132,6 +132,58 @@ class GEXChartLayoutTests(unittest.TestCase):
         self.assertEqual(list(fig.data[0].x)[0], 6497.0)
         self.assertEqual(list(fig.data[0].x)[-1], 7937.0)
 
+    def test_spot_and_yahoo_are_colored_dots_on_existing_curve(self):
+        report, spot = example_report()
+        frozen = copy.deepcopy(report)
+        actual = 7250.25
+        fig = _curve_chart(
+            report, spot, symbol="SPX", es_spx_basis=17.0,
+            es_quote={"price": actual, "symbol": "ESZ26.CME"},
+        )
+        spot_trace = next(t for t in fig.data
+                          if t.name == "Spot CSV · ES equivalente")
+        yahoo_trace = next(t for t in fig.data
+                           if t.name == "ES Yahoo · 7,250.25 (ESZ26.CME)")
+        self.assertEqual(spot_trace.mode, "markers")
+        self.assertEqual(yahoo_trace.mode, "markers")
+        self.assertEqual(spot_trace.marker.color, "#e5e7eb")
+        self.assertEqual(yahoo_trace.marker.color, "#fb923c")
+        self.assertEqual(spot_trace.marker.size, 10)
+        self.assertEqual(yahoo_trace.marker.size, 12)
+        self.assertAlmostEqual(spot_trace.x[0], 7217.0)
+        self.assertAlmostEqual(yahoo_trace.x[0], actual)
+        self.assertEqual(len(spot_trace.x), 1)
+        self.assertEqual(len(yahoo_trace.x), 1)
+        curve = fig.data[0]
+        # L'ordinata è interpolata fra due punti realmente calcolati;
+        # né il prezzo ES Yahoo né il NET GEX sono ricalcolati.
+        for trace in (spot_trace, yahoo_trace):
+            idx = next(i for i in range(1, len(curve.x))
+                       if curve.x[i-1] <= trace.x[0] <= curve.x[i])
+            weight = ((trace.x[0] - curve.x[idx-1]) /
+                      (curve.x[idx] - curve.x[idx-1]))
+            expected_y = (curve.y[idx-1] +
+                          weight * (curve.y[idx] - curve.y[idx-1]))
+            self.assertAlmostEqual(trace.y[0], expected_y)
+        self.assertEqual(frozen, report)
+        self.assertEqual(len(curve.x), 201)
+        self.assertEqual([t.mode for t in fig.data
+                          if t.name.startswith(("Call Wall", "Put Wall",
+                                                "Gamma Flip"))],
+                         ["lines", "lines", "lines"])
+
+    def test_spot_marker_without_yahoo_quote_and_no_fabricated_quote(self):
+        report, spot = example_report()
+        fig = _curve_chart(report, spot, symbol="SPX",
+                           es_spx_basis=17.0, es_quote=None)
+        self.assertEqual(
+            next(t for t in fig.data
+                 if t.name == "Spot CSV · ES equivalente").mode,
+            "markers",
+        )
+        self.assertFalse(any(t.name.startswith("ES Yahoo")
+                             for t in fig.data))
+
     def test_historical_quote_outside_range_does_not_stretch_curve(self):
         report, spot = example_report()
         fig = _curve_chart(
