@@ -48,6 +48,14 @@ class GEXChartLayoutTests(unittest.TestCase):
         self.assertIn('default="±2%"', panel)
         self.assertIn('spot=info["spot"]', panel)
         self.assertIn('st.subheader("Curva teorica GEX · scenario prezzo")', panel)
+        self.assertLess(
+            panel.index('st.subheader("GEX by Strike · composizione Call / Put")'),
+            panel.index('st.subheader("Curva teorica GEX · scenario prezzo")'),
+        )
+        self.assertLess(
+            panel.index('st.plotly_chart(\n            strike_fig'),
+            panel.index('_live_es_curve(\n            report,info["spot"]'),
+        )
 
     def test_2_5_10_and_all_only_filter_display_not_report(self):
         report, spot = example_report()
