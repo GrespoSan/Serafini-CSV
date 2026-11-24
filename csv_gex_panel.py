@@ -9,6 +9,7 @@ from csv_gex_engine import MODEL_LABEL
 from csv_gex_price_display import gex_display_price, gex_price_label
 from csv_gex_es_quote import fetch_es_quote
 from csv_gex_curve import curve_extrema, quote_inside_curve
+from csv_gex_source_display import describe_gex_sources
 # Compatibilità con eventuali import precedenti: cache e configurazione dati
 # vivono in un modulo autonomo, senza dipendere dalla presentazione Streamlit.
 from csv_gex_services import (
@@ -323,10 +324,11 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
 
 def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> None:
     st.caption(
-        "**Modulo autonomo · fonte CSV Cboe.** "
-        "Matematica derivata dal motore Edge Alpaca/OCC, ma i dati NON sono "
-        "Alpaca/OPRA e non hanno un'età OI certificata. "
-        "Il NET GAMMA Serafini non viene modificato né usato per il GEX."
+        "**Modulo GEX locale, modello Edge-style.** "
+        "Dati di base dal CSV Cboe; Open Interest dal CSV oppure da OCC, "
+        "secondo la fonte effettivamente utilizzata. "
+        "**Nessun download Alpaca/OPRA.** "
+        "NET GAMMA Serafini e GEX rimangono distinti."
     )
     if not payload or not symbol:
         st.info("Carica una fotografia CSV Cboe nel modulo NET GAMMA "
@@ -374,28 +376,41 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
                     "Il NET GAMMA e il relativo Pine restano utilizzabili.")
         return
     info = saved[1]
-    st.caption("**Calcolo automatico:** un solo CSV alimenta NET GAMMA e GEX. "
-               "Il Pine include i livelli GEX quando superano i controlli di qualità.")
-    st.caption(
-        f"**Fonte:** CSV Cboe caricato · **Acquisizione originale:** "
-        f"{info['timestamp_rome']} Roma · **Modello:** {MODEL_LABEL} · "
-        f"**Quote:** non certificate · **OI:** data non documentata. "
-        f"Contratti analizzati: {info['csv_contracts']} · "
-        f"OI assenti: {info['oi_missing']} · IV assenti: {info['iv_missing']}."
-    )
-    oi=info.get("oi_info") or {}
-    oi_source=oi.get("effective_source","CSV_CBOE")
-    if oi_source=="OCC_SERIES_SEARCH":
-        st.caption(
-            f"**Fonte OI GEX: OCC Series Search** · "
-            f"download {oi.get('occ_download_utc') or 'N/D'} · "
-            f"riconciliati {oi.get('matched')}/{oi.get('eligible')} contratti "
-            f"(±10% spot; {oi.get('match_pct')}%). "
-            "**Data di riferimento OI: N/D** (OCC non la certifica in questo report). "
-            "La IV resta quella del CSV."
+    oi = info.get("oi_info") or {}
+    provenance = describe_gex_sources(info)
+    st.markdown(f"#### {provenance['title']}")
+    source_col, oi_col = st.columns(2, gap="medium")
+    with source_col:
+        st.markdown(
+            "**Fotografia opzioni — prezzo, IV, contratti**  \\n"
+            f"{provenance['snapshot_source']}  \\n"
+            f"**Ora fotografia:** {provenance['snapshot_clock']}"
         )
-    else:
-        st.caption("**Fonte OI GEX: CSV Cboe** · data OI non documentata.")
+    with oi_col:
+        st.markdown(
+            "**Open Interest effettivamente impiegato**  \\n"
+            f"{provenance['oi_source']}  \\n"
+            f"**Ora download OCC:** {provenance['oi_download_clock']}"
+        )
+    st.caption(
+        f"**Data reale OI:** {provenance['oi_vintage']}. "
+        f"**Alpaca/OPRA:** {provenance['alpaca']}. "
+        + provenance["note"]
+    )
+    st.caption(
+        f"**Modello:** {MODEL_LABEL} · "
+        "**Calcolo automatico:** il Pine include i livelli GEX quando "
+        "superano i controlli di qualità · "
+        f"Contratti analizzati: {info['csv_contracts']} · "
+        f"OI assenti nel CSV: {info['oi_missing']} · "
+        f"IV assenti: {info['iv_missing']}."
+    )
+    if oi.get("effective_source") == "OCC_SERIES_SEARCH":
+        st.caption(
+            f"**Riconciliazione OCC:** {oi.get('matched')}/{oi.get('eligible')} "
+            f"contratti nella banda ±10% spot ({oi.get('match_pct')}%). "
+            "Il prezzo e la IV restano quelli della fotografia Cboe."
+        )
     if oi.get("fallback_reason"):
         st.warning(
             "**Fallback OCC → CSV dichiarato:** "+str(oi["fallback_reason"]) +
