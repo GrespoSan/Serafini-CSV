@@ -192,6 +192,26 @@ class GEXChartLayoutTests(unittest.TestCase):
         self.assertFalse(any(t.name.startswith("ES Yahoo")
                              for t in fig.data))
 
+    def test_curve_extrema_show_price_not_peak_word_and_no_metric_cards(self):
+        from csv_gex_curve import curve_extrema
+        report, spot = example_report()
+        curve = _curve_chart(report, spot, symbol="SPX", es_spx_basis=17.0)
+        expected = curve_extrema(report, symbol="SPX", es_spx_basis=17.0)
+        for key, label in (("maximum", "Picco MAX"), ("minimum", "Picco MIN")):
+            trace = next(t for t in curve.data if t.name == label)
+            self.assertEqual(trace.mode, "markers+text")
+            self.assertEqual(list(trace.text),
+                             [f"{expected[key]['price']:,.2f}"])
+            self.assertNotIn("Picco ", trace.text[0])
+        panel = (Path(__file__).resolve().parents[1] /
+                 "csv_gex_panel.py").read_text(encoding="utf-8")
+        self.assertNotIn("Picco massimo curva", panel)
+        self.assertNotIn("Picco minimo curva", panel)
+        self.assertLess(
+            panel.index('st.subheader("GEX by Strike'),
+            panel.index('st.subheader("Curva teorica GEX'),
+        )
+
     def test_historical_quote_outside_range_does_not_stretch_curve(self):
         report, spot = example_report()
         fig = _curve_chart(
