@@ -160,7 +160,7 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
             item = extrema[key]
             fig.add_trace(go.Scatter(
                 x=[item["price"]], y=[item["gex"] / 1e9],
-                mode="markers+text", text=[label], textposition=position,
+                mode="markers+text", text=[f"{item['price']:,.2f}"], textposition=position,
                 textfont=dict(size=11, color=color),
                 marker=dict(size=10, color=color,
                             line=dict(width=1, color="#ffffff")),
@@ -486,17 +486,6 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
         "Gamma Flip solo se la curva attraversa realmente lo zero."
     )
     if basis_available:
-        extremes=curve_extrema(report,symbol=symbol,es_spx_basis=es_spx_basis)
-        if extremes:
-            peak_high,peak_low=st.columns(2)
-            for col,key,label in ((peak_high,"maximum","Picco massimo curva"),
-                                  (peak_low,"minimum","Picco minimo curva")):
-                point=extremes[key]
-                col.metric(f"{label} · prezzo {price_symbol}",
-                           _number(point["price"]),
-                           f"NET GEX {point['gex']/1e9:+.3f} mld USD / 1%")
-            st.caption("Massimo e minimo globali dei 201 punti della curva "
-                       "teorica nel range ±10%: non sono previsioni né strike.")
         st.subheader("GEX by Strike · composizione Call / Put")
         st.caption(
             "**PUTS − a sinistra (viola)** · **CALLS + a destra (verde)**. "
