@@ -54,6 +54,35 @@ il suo Pine continuano a funzionare **senza alcun livello GEX inventato**.
 Per 0DTE e Weekly i controlli di qualità sono indipendenti; il Pine
 contiene i soli gruppi validi.
 
+## Grafici GEX · curva e profilo per strike
+
+Nel pannello **ANALISI GEX** sono visibili in sequenza due grafici principali,
+senza expander intermedio:
+
+1. **Curva teorica GEX**: scenario prezzo ±10% con IV, OI e tempo congelati.
+   La legenda sopra il grafico identifica la curva azzurra, lo spot della
+   fotografia, Call Wall, Put Wall, Gamma Flip e, quando effettivamente
+   disponibile nella banda, il prezzo ES Yahoo ritardato. I riferimenti
+   sono linee distinte: nessuna etichetta sovrapposta agli assi.
+2. **GEX by Strike · Calls/Puts**: barre orizzontali specchiate,
+   Put negativi **viola** a sinistra e Call positivi **verde** a destra,
+   medesime unità mld USD / movimento dell'1% e asse verticale di prezzo.
+   Call Wall, Put Wall, Gamma Flip e spot del CSV hanno linee orizzontali
+   con cartellini sul lato destro. Per SPX sono convertiti in **prezzo ES
+   equivalente** con il differenziale già verificato dal Pine.
+
+Il grafico per strike è **sempre aperto** sotto la curva. Il selettore
+**±2% (default), ±5%, ±10%, Tutti** limita solo gli strike visualizzati
+rispetto allo spot **della fotografia** (non alla quotazione ES in tempo
+reale). Non modifica la catena originale, GEX, Call/Put Wall, Flip,
+regime, scenario, né l'export Pine. Se un livello cade fuori dalla finestra,
+viene dichiarato, non spostato o inventato. L'ES Yahoo attuale rimane una
+serie separata, con provenienza e orario, e non cambia i valori GEX
+calcolati dal CSV storico.
+
+Test: `tests/test_csv_gex_chart_layout.py` e
+`tests/test_csv_gex_es_display.py`.
+
 ## Pine Script: GEX automatico nel NET GAMMA esistente
 
 Il modulo **csv_gex_pine.py** aggiunge in fondo al Pine originale esclusivamente
