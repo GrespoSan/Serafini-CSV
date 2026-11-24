@@ -44,8 +44,10 @@ class GEXOnlyESTests(unittest.TestCase):
         self.assertIn('gex_display_price(r["strike"], symbol, es_spx_basis)', panel)
         self.assertIn("if basis_available:\n        extremes=curve_extrema(", panel)
         self.assertIn("_live_es_curve(", panel)
-        self.assertIn("fig.add_vline(", panel)
-        self.assertIn("ES {price:,.2f}", panel)
+        self.assertIn("fig.add_vline(x=0", panel)
+        self.assertIn("vertical(actual,", panel)
+        self.assertIn("quote_inside_curve(", panel)
+        self.assertIn("ES Yahoo · {actual:,.2f}", panel)
         self.assertIn("**Livelli esclusivamente ES/MES**", panel)
 
 
