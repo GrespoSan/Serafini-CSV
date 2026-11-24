@@ -2,7 +2,7 @@
 
 ## Architettura e provenienza
 
-Questo modulo **non** legge dall'app Serafini SPX, non usa Supabase, non usa servizi attivi del laboratorio Edge e **non** effettua nuove chiamate Alpaca/OCC. Accetta solo la fotografia CSV Cboe caricata nella stessa sessione Streamlit. Il NET GAMMA originale non è alterato.
+Questo modulo **non** legge dall'app Serafini SPX, non usa Supabase, non usa servizi attivi del laboratorio Edge e **non effettua chiamate Alpaca/OPRA**. La fotografia CSV Cboe caricata in Streamlit fornisce sempre prezzi, IV e contratti. Per il solo **Open Interest** si può utilizzare il CSV oppure effettuare una chiamata autonoma a **OCC Series Search**, in modalità Auto (con fallback esplicito) o OCC-only. Il NET GAMMA originale non è alterato.
 
 Il calcolo matematico proviene dal motore testato in GrespoSan/SPX-Edge-GEX-Lab:
 - gexlab/engine/gex.py (blob 156713de1d593fb8ea38e3a7a8aae2ad5a1a361d)
@@ -11,6 +11,27 @@ Il calcolo matematico proviene dal motore testato in GrespoSan/SPX-Edge-GEX-Lab:
 - gexlab/models.py (blob b60e5bb6c392212871dfad678b993f94b45ad253)
 
 Sono incorporati **solo i moduli matematici puri**, con import locali in csv_gex_core. Restano fuori credenziali, client REST, cache condivise, storage, scheduler e comandi di trading. Non è richiesto aprire l'altra app.
+
+## Orari e fonte effettiva del GEX
+
+La UI presenta esplicitamente **DATI GEX: SOLO CSV CBOE** oppure
+**DATI GEX: CSV CBOE + OPEN INTEREST OCC**, in base alla fonte
+effettivamente usata, non alla semplice scelta del menu Auto.
+Mostra due orari differenti, entrambi convertiti in **Europe/Rome**:
+
+- **Ora fotografia CSV Cboe**: timestamp originale del prezzo, delle IV e
+  della catena utilizzata nel GEX.
+- **Ora download OCC**: acquisizione dell'Open Interest se usato.
+  OCC Series Search non certifica nel report la data reale degli OI;
+  non si deve confondere l'ora del download con il loro as-of.
+  Se il GEX usa OI CSV, compare «Nessun download OCC utilizzato».
+
+L'app **non utilizza feed Alpaca/OPRA**: Edge-style descrive la matematica
+del modello, non la fonte dati. Una fotografia CSV e un download OCC della
+stessa seduta non sono necessariamente temporalmente sincronizzati.
+In modalità Auto, il fallback OCC → CSV rimane esplicitamente dichiarato.
+Questa distinzione è applicata alla visualizzazione e **non cambia** GEX,
+NET GAMMA né Pine.
 
 ## Modello e unità
 
