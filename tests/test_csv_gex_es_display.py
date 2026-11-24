@@ -45,7 +45,7 @@ class GEXOnlyESTests(unittest.TestCase):
         self.assertIn("if basis_available:\n        extremes=curve_extrema(", panel)
         self.assertIn("_live_es_curve(", panel)
         self.assertIn("fig.add_vline(x=0", panel)
-        self.assertIn("vertical(actual,", panel)
+        self.assertIn("marker_on_curve(\n            actual,", panel)
         self.assertIn("quote_inside_curve(", panel)
         self.assertIn("ES Yahoo · {actual:,.2f}", panel)
         self.assertIn("**Livelli esclusivamente ES/MES**", panel)
