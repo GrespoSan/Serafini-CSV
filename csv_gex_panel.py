@@ -67,86 +67,221 @@ def _live_es_curve(report, spot, *, symbol, es_spx_basis, selected):
 
 
 def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
+    """Curva teorica invariata; legenda reale e nessuna etichetta sovrapposta."""
     grid = report["curve"]
+    xs = [gex_display_price(row["spot"], symbol, es_spx_basis) for row in grid]
+    ys = [row["net_gex"] / 1e9 for row in grid]
+    low, high = min(ys + [0]), max(ys + [0])
+    padding = max((high - low) * .08, .05)
+    ymin, ymax = low - padding, high + padding
     fig = go.Figure()
     fig.add_trace(go.Scatter(
-        x=[gex_display_price(row["spot"], symbol, es_spx_basis) for row in grid],
-        y=[row["net_gex"] / 1e9 for row in grid],
-        mode="lines", line=dict(color="#43d6ee", width=2.5),
-        name="GEX scenario",
-        hovertemplate="Spot teorico %{x:,.2f}<br>NET GEX %{y:+.3f} mld<extra></extra>",
+        x=xs, y=ys, mode="lines",
+        line=dict(color="#43d6ee", width=3),
+        name="Curva NET GEX",
+        hovertemplate="Scenario %{x:,.2f}<br>NET GEX %{y:+.3f} mld/1%<extra></extra>",
     ))
-    # Green/red extrema are computed on the same displayed 201-point curve.
-    extreme=curve_extrema(report,symbol=symbol,es_spx_basis=es_spx_basis)
-    if extreme:
-        for key,color,label,position in (
-            ("maximum","#22c55e","Picco MAX","top center"),
-            ("minimum","#f87171","Picco MIN","bottom center"),
-        ):
-            item=extreme[key]
-            fig.add_trace(go.Scatter(
-                x=[item["price"]],y=[item["gex"]/1e9],
-                mode="markers+text",text=[label],textposition=position,
-                textfont=dict(size=11,color=color),
-                marker=dict(size=10,color=color,line=dict(width=1,color="#ffffff")),
-                hovertemplate=(f"{label}: prezzo %{{x:,.2f}}<br>"
-                               "NET GEX %{y:+.3f} mld<extra></extra>"),
-                showlegend=False,name=label,
-            ))
-    fig.add_hline(y=0, line_color="#717984", line_width=1)
-    fig.add_vline(x=gex_display_price(spot, symbol, es_spx_basis),
-                  line_dash="dot", line_color="#f4f5f6",
-                  annotation_text=("Spot equivalente ES" if symbol == "SPX"
-                                   else "Spot del CSV"))
-    for value, color, label in (
-        (report["call_wall"], "#22c55e", "Call Wall"),
-        (report["put_wall"], "#ef4444", "Put Wall"),
-        (report["flip"], "#facc15", "Gamma Flip"),
+    fig.add_hline(y=0, line_color="#777d8c", line_width=1)
+
+    def vertical(price, name, color, dash="dash", width=1.5):
+        if price is None:
+            return
+        # Tracce vere anziché annotazioni in alto: si identificano dalla
+        # legenda e non si accavallano vicino a spot/wall/flip.
+        fig.add_trace(go.Scatter(
+            x=[price, price], y=[ymin, ymax],
+            mode="lines", name=name,
+            line=dict(color=color, width=width, dash=dash),
+            hovertemplate=name + " %{x:,.2f}<extra></extra>",
+        ))
+
+    display_symbol = gex_price_label(symbol)
+    vertical(gex_display_price(spot, symbol, es_spx_basis),
+             f"Spot CSV · {display_symbol} equivalente" if symbol == "SPX"
+             else f"Spot CSV · {display_symbol}", "#dbe1ec", "dot")
+    for field, label, color, dash in (
+        ("call_wall", "Call Wall", "#8fe10a", "solid"),
+        ("put_wall", "Put Wall", "#9b4de1", "solid"),
+        ("flip", "Gamma Flip", "#c084fc", "dot"),
     ):
-        if value is not None:
-            fig.add_vline(x=gex_display_price(value, symbol, es_spx_basis),
-                          line_dash="dash", line_color=color,
-                          annotation_text=label, annotation_position="top")
-    # Direct ES futures quote. NOT SPX spot + basis, not a GEX recalculation.
-    if quote_inside_curve(report,es_quote,symbol=symbol,es_spx_basis=es_spx_basis):
-        price=float(es_quote["price"])
-        fig.add_vline(
-            x=price,line_dash="dashdot",line_width=2,
-            line_color="#fb923c",
-            annotation_text=f"ES {price:,.2f} · {es_quote['symbol']}",
-            annotation_position="bottom",
-        )
+        vertical(gex_display_price(report[field], symbol, es_spx_basis),
+                 f"{label} · {display_symbol}", color, dash)
+
+    # Prezzo reale futures: fonte/tempo diversi dal CSV. Non ricalcola GEX,
+    # non allarga la curva di un CSV storico e non crea un prezzo sintetico.
+    if quote_inside_curve(report, es_quote, symbol=symbol,
+                          es_spx_basis=es_spx_basis):
+        actual = float(es_quote["price"])
+        vertical(actual, f"ES Yahoo · {actual:,.2f} ({es_quote['symbol']})",
+                 "#fb923c", "dashdot", 2)
+
+    extrema = curve_extrema(report, symbol=symbol, es_spx_basis=es_spx_basis)
+    if extrema:
+        for key, color, label, position in (
+            ("maximum", "#22c55e", "Picco MAX", "top center"),
+            ("minimum", "#fb7185", "Picco MIN", "bottom center"),
+        ):
+            item = extrema[key]
+            fig.add_trace(go.Scatter(
+                x=[item["price"]], y=[item["gex"] / 1e9],
+                mode="markers+text", text=[label], textposition=position,
+                textfont=dict(size=11, color=color),
+                marker=dict(size=10, color=color,
+                            line=dict(width=1, color="#ffffff")),
+                name=label, showlegend=False,
+                hovertemplate=(f"{label}: prezzo %{{x:,.2f}}<br>"
+                               "NET GEX %{y:+.3f} mld/1%<extra></extra>"),
+            ))
     fig.update_layout(
-        template="plotly_dark", height=490,
-        margin=dict(l=18, r=25, t=35, b=30),
-        xaxis_title=(f"Scenario teorico prezzo {gex_price_label(symbol)}"
-                     + (" · differenziale costante" if symbol == "SPX" else "")),
+        template="plotly_dark", height=520,
+        margin=dict(l=52, r=35, t=92, b=52),
+        paper_bgcolor="#0b0a12", plot_bgcolor="#0b0a12",
+        xaxis_title=(f"Scenario teorico prezzo {display_symbol}"
+                     + (" · basis costante della fotografia" if symbol == "SPX" else "")),
         yaxis_title="NET GEX (mld USD / movimento 1%)",
-        showlegend=False,
+        legend=dict(orientation="h", x=0, y=1.19, xanchor="left",
+                    yanchor="bottom", font=dict(size=11),
+                    bgcolor="rgba(0,0,0,0)", traceorder="normal"),
+        showlegend=True, hovermode="closest",
     )
+    fig.update_yaxes(gridcolor="#2d2e3c", zeroline=False,
+                     range=[ymin, ymax])
+    fig.update_xaxes(gridcolor="#272936")
     return fig
 
 
-def _strikes_chart(report, *, symbol, es_spx_basis=None):
-    rows = report["rows"]
-    fig = go.Figure()
-    for field, name, color in (
-        ("call_gex", "Call GEX (+)", "#22c55e"),
-        ("put_gex", "Put GEX (−)", "#ef4444"),
-    ):
-        fig.add_trace(go.Bar(
-            y=[gex_display_price(r["strike"], symbol, es_spx_basis) for r in rows],
-            x=[r[field] / 1e9 for r in rows],
-            orientation="h", marker_color=color, name=name,
-        ))
-    fig.update_layout(
-        template="plotly_dark", height=490, barmode="relative",
-        margin=dict(l=18, r=25, t=28, b=30),
-        xaxis_title="GEX stimato (mld USD / movimento 1%)",
-        yaxis_title=(f"Prezzo equivalente {gex_price_label(symbol)}"
-                     if symbol == "SPX" else "Strike originale CSV"),
-        legend=dict(orientation="h"),
+GEX_STRIKE_WINDOWS = ("±2%", "±5%", "±10%", "Tutti")
+
+
+def _strike_window(rows, *, spot, symbol, es_spx_basis=None, window="±2%"):
+    """Seleziona solo la VISUALIZZAZIONE, mai i dati GEX del motore.
+
+    Percentuali riferite al prezzo equivalente del sottostante nella foto
+    CSV. Non si usa la quotazione ES corrente per filtrare un CSV storico.
+    """
+    if window not in GEX_STRIKE_WINDOWS:
+        raise ValueError("Intervallo strike non previsto")
+    center = gex_display_price(spot, symbol, es_spx_basis)
+    if center is None:
+        raise ValueError("Prezzo della fotografia non convertibile")
+    priced = [(r, gex_display_price(r["strike"], symbol, es_spx_basis))
+              for r in rows]
+    if window == "Tutti":
+        if not priced:
+            return [], center * .98, center * 1.02, center
+        vals = [v for _, v in priced]
+        lo, hi = min(vals), max(vals)
+        pad = max((hi - lo) * .015, center * .0005)
+        return priced, lo - pad, hi + pad, center
+    pct = {"±2%": .02, "±5%": .05, "±10%": .10}[window]
+    lo, hi = center * (1 - pct), center * (1 + pct)
+    return [(row, value) for row, value in priced if lo <= value <= hi], lo, hi, center
+
+
+def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
+    """GEX per strike specchiato, finestra selezionabile, livelli a destra.
+
+    Usa esattamente report['rows'] e i livelli calcolati, senza ricampionare,
+    interpolare o risommare i contratti. Colori e gerarchia visiva del
+    riferimento fornito dall'utente, non una copia di codice di terzi.
+    """
+    shown, low, high, center = _strike_window(
+        report["rows"], spot=spot, symbol=symbol,
+        es_spx_basis=es_spx_basis, window=window,
     )
+    fig = go.Figure()
+    levels = [v for _, v in shown]
+    # Spessore correlato al passo reale delle quotazioni, senza inventare
+    # strike intermedi. Non altera i valori delle barre.
+    sorted_levels = sorted(set(levels))
+    steps = [b - a for a, b in zip(sorted_levels, sorted_levels[1:])
+             if b > a]
+    min_step = min(steps) if steps else max((high - low) / 40, .5)
+    bar_width = max(min_step * .82, .001)
+    y = [price for _, price in shown]
+
+    for key, label, color in (
+        ("put_gex", "PUTS −", "#9134d7"),
+        ("call_gex", "CALLS +", "#80d80c"),
+    ):
+        values = [float(r[key]) / 1e9 for r, _ in shown]
+        fig.add_trace(go.Bar(
+            x=values, y=y, orientation="h", width=bar_width,
+            name=label, marker=dict(color=color, line=dict(width=0)),
+            hovertemplate=(f"{label} · {gex_price_label(symbol)} %{{y:,.2f}}"
+                           "<br>GEX %{x:+.4f} mld USD / 1%<extra></extra>"),
+        ))
+
+    maxabs = max([abs(float(r[key]) / 1e9)
+                  for r, _ in shown for key in ("call_gex", "put_gex")] or [0])
+    x_extent = max(maxabs * 1.10, .005)
+    fig.add_vline(x=0, line_color="#6c7281", line_width=1.1)
+    display_symbol = gex_price_label(symbol)
+
+    # Riferimenti orizzontali e box a destra come nel campione visivo.
+    # I dati originali rimangono invariati, conversione SPX->ES solo asse.
+    markers = [
+        ("Call Wall", report["call_wall"], "#8fe10a", "solid", "#8fe10a", "#13210c"),
+        ("Put Wall", report["put_wall"], "#9634db", "solid", "#9634db", "#ffffff"),
+        ("Gamma Flip", report["flip"], "#c084fc", "dot", "#251237", "#e9c7ff"),
+        ("Spot CSV", spot, "#e2e8f0", "dash", "#e2e8f0", "#111827"),
+    ]
+    offscreen = []
+    for label, raw, color, dash, background, foreground in markers:
+        price = gex_display_price(raw, symbol, es_spx_basis)
+        if price is None:
+            continue
+        if not (low <= price <= high):
+            offscreen.append(label)
+            continue
+        fig.add_trace(go.Scatter(
+            x=[-x_extent, x_extent], y=[price, price],
+            mode="lines", name=f"{label} / {display_symbol}",
+            line=dict(color=color, width=1.35, dash=dash),
+            hovertemplate=f"{label} / {display_symbol} %{{y:,.2f}}<extra></extra>",
+        ))
+        fig.add_annotation(
+            x=1.014, y=price, xref="paper", yref="y",
+            xanchor="left", yanchor="middle",
+            text=(f"<b>{label.upper()} / {display_symbol}"
+                  f" &nbsp; {price:,.2f}</b>"),
+            showarrow=False, align="left",
+            bgcolor=background, bordercolor=color,
+            borderwidth=1, borderpad=5,
+            font=dict(family="Arial", size=11, color=foreground),
+        )
+
+    # Asse leggibile anche su schermi 1080p; invece di scrivere ogni strike
+    # si mantiene la risoluzione originaria ma si diradano le tacche.
+    span = high - low
+    dtick = 10 if span <= 350 else 20 if span <= 700 else 50
+    fig.update_layout(
+        template="plotly_dark", height=760,
+        paper_bgcolor="#0b0a12", plot_bgcolor="#0b0a12",
+        margin=dict(l=66, r=250, t=88, b=54),
+        barmode="relative", bargap=.05,
+        xaxis_title="GEX stimato (mld USD / movimento sottostante 1%)",
+        yaxis_title=(f"Prezzo equivalente {display_symbol}"
+                     if symbol == "SPX" else f"Prezzo {display_symbol}"),
+        showlegend=True, hovermode="closest",
+        legend=dict(orientation="h", x=0, y=1.15, xanchor="left",
+                    yanchor="bottom", font=dict(size=11),
+                    bgcolor="rgba(0,0,0,0)"),
+    )
+    fig.update_xaxes(range=[-x_extent, x_extent], showgrid=True,
+                     gridcolor="#272936", zeroline=False,
+                     tickformat=".2f")
+    fig.update_yaxes(range=[low, high], showgrid=True,
+                     gridcolor="#262937", zeroline=False,
+                     tickformat=",.0f", dtick=dtick)
+    # Informazioni per le didascalie Streamlit; nessun effetto sui calcoli.
+    fig.update_layout(meta={
+        "strike_visible": len(shown),
+        "strike_total": len(report["rows"]),
+        "window": window,
+        "offscreen_levels": offscreen,
+        "spot_display": center,
+    })
     return fig
 
 
