@@ -58,7 +58,7 @@ def _live_es_curve(report, spot, *, symbol, es_spx_basis, selected):
     if symbol=="SPX" and quote and quote.get("price") is not None and not quote_inside_curve(
             report,quote,symbol=symbol,es_spx_basis=es_spx_basis):
         st.caption("La quotazione ES è fuori dal range ±10% della fotografia CSV: "
-                   "prezzo mostrato sopra ma linea esclusa per non alterare la scala.")
+                   "prezzo mostrato sopra ma pallino escluso per non alterare la scala.")
     st.plotly_chart(
         _curve_chart(report, spot, symbol=symbol,
                      es_spx_basis=es_spx_basis, es_quote=quote),
@@ -531,10 +531,10 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
         st.divider()
         st.subheader("Curva teorica GEX · scenario prezzo")
         st.caption(
-            "Legenda nella parte superiore: curva azzurra, spot della "
-            "fotografia, Call Wall, Put Wall, Gamma Flip e prezzo ES Yahoo "
-            "quando disponibile. Le linee sono riferimenti di prezzo, "
-            "non previsioni del percorso futuro."
+            "Legenda superiore: curva NET GEX azzurra, Spot CSV come pallino "
+            "grigio chiaro, ES Yahoo come pallino arancione (se disponibile). "
+            "Call Wall, Put Wall e Gamma Flip rimangono linee verticali "
+            "di riferimento, non previsioni del percorso futuro."
         )
         _live_es_curve(
             report,info["spot"],symbol=symbol,
