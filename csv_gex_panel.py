@@ -382,14 +382,14 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
     source_col, oi_col = st.columns(2, gap="medium")
     with source_col:
         st.markdown(
-            "**Fotografia opzioni — prezzo, IV, contratti**  \\n"
-            f"{provenance['snapshot_source']}  \\n"
+            "**Fotografia opzioni — prezzo, IV, contratti**  \n"
+            f"{provenance['snapshot_source']}  \n"
             f"**Ora fotografia:** {provenance['snapshot_clock']}"
         )
     with oi_col:
         st.markdown(
-            "**Open Interest effettivamente impiegato**  \\n"
-            f"{provenance['oi_source']}  \\n"
+            "**Open Interest effettivamente impiegato**  \n"
+            f"{provenance['oi_source']}  \n"
             f"**Ora download OCC:** {provenance['oi_download_clock']}"
         )
     st.caption(
