@@ -461,15 +461,57 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
                            f"NET GEX {point['gex']/1e9:+.3f} mld USD / 1%")
             st.caption("Massimo e minimo globali dei 201 punti della curva "
                        "teorica nel range ±10%: non sono previsioni né strike.")
+        st.subheader("Curva teorica GEX · scenario prezzo")
+        st.caption(
+            "Legenda nella parte superiore: curva azzurra, spot della "
+            "fotografia, Call Wall, Put Wall, Gamma Flip e prezzo ES Yahoo "
+            "quando disponibile. Le linee sono riferimenti di prezzo, "
+            "non previsioni del percorso futuro."
+        )
         _live_es_curve(
             report,info["spot"],symbol=symbol,
             es_spx_basis=es_spx_basis,selected=selected,
         )
-        with st.expander("GEX per strike · composizione Call / Put", expanded=False):
-            st.plotly_chart(
-                _strikes_chart(report, symbol=symbol,
-                               es_spx_basis=es_spx_basis),
-                use_container_width=True, key=f"csv_gex_strikes_{selected}",
+
+        st.divider()
+        st.subheader("GEX by Strike · composizione Call / Put")
+        st.caption(
+            "**PUTS − a sinistra (viola)** · **CALLS + a destra (verde)**. "
+            "La linea bianca indica lo spot del CSV "
+            + ("in equivalente ES; NON è la quotazione ES attuale."
+               if symbol == "SPX" else "del sottostante.") +
+            " Wall e Gamma Flip sono contrassegnati da linee orizzontali "
+            "e cartellini a destra. I grafici utilizzano lo stesso report GEX."
+        )
+        selected_window = st.segmented_control(
+            "Intervallo di prezzo attorno allo spot del CSV",
+            options=list(GEX_STRIKE_WINDOWS),
+            default="±2%", key="csv_gex_strike_window",
+            help="Riduce solo gli strike visibili; non modifica GEX, "
+                 "Wall, Flip, regime o codice Pine.",
+        )
+        window = selected_window or "±2%"
+        strike_fig = _strikes_chart(
+            report, symbol=symbol, spot=info["spot"],
+            es_spx_basis=es_spx_basis, window=window,
+        )
+        st.plotly_chart(
+            strike_fig, use_container_width=True,
+            key=f"csv_gex_strikes_{selected}",
+        )
+        meta = strike_fig.layout.meta or {}
+        st.caption(
+            f"**{meta.get('strike_visible', 0)} strike visualizzati** su "
+            f"{meta.get('strike_total', 0)} disponibili · finestra {window} · "
+            "unità in miliardi USD per movimento dell'1%. "
+            "La selezione agisce solo sulla visualizzazione."
+        )
+        if meta.get("strike_visible", 0) == 0:
+            st.info("Nessuno strike Cboe disponibile nella finestra selezionata: "
+                    "allarga a ±5%, ±10% o Tutti.")
+        if meta.get("offscreen_levels"):
+            st.caption(
+                "Fuori dalla finestra selezionata: "
+                + ", ".join(meta["offscreen_levels"])
+                + ". I livelli rimangono calcolati e non vengono modificati."
             )
-            st.caption("Unità: miliardi di USD per movimento dell'1%. "
-                       "Contributi Put negativi per convenzione modellistica.")
