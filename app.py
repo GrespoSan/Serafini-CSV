@@ -119,32 +119,37 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
             # Qualsiasi errore GEX non blocca il NET GAMMA Serafini.
             csv_bytes = upload.getvalue()
             csv_sha256 = hashlib.sha256(csv_bytes).hexdigest()
-            from csv_gex_panel import (_cached_gex, _cached_occ,
-                                       OI_LABELS, DEFAULT_OI_LABEL)
-            from csv_gex_pine import MODE_BY_LABEL
-            oi_label = st.session_state.get('csv_gex_oi_source', DEFAULT_OI_LABEL)
-            oi_mode = OI_LABELS.get(oi_label, 'auto')
+            # La visualizzazione GEX non deve mai essere una dipendenza
+            # necessaria per caricare NET GAMMA, grafici o Pine originale.
             st.session_state['csv_gex_current_source'] = {
-                'sha256': csv_sha256, 'symbol': symbol, 'oi_mode': oi_mode,
+                'sha256': csv_sha256, 'symbol': symbol, 'oi_mode': 'auto',
             }
-            iv_label = st.session_state.get(
-                'csv_gex_iv_units',
-                'Rilevamento automatico (blocco se IV ambigua)',
-            )
-            iv_mode = MODE_BY_LABEL.get(iv_label, 'auto')
             st.session_state['csv_gex_last_report'] = None
             st.session_state['csv_gex_last_error'] = None
             try:
+                # I servizi dati GEX sono separati da csv_gex_panel (solo UI).
+                # Proteggere anche gli import: un errore GEX deve lasciare
+                # il resto dell'app CSV perfettamente utilizzabile.
+                from csv_gex_services import (
+                    _cached_gex, _cached_occ, OI_LABELS, DEFAULT_OI_LABEL,
+                )
+                from csv_gex_pine import MODE_BY_LABEL
+                oi_label = st.session_state.get('csv_gex_oi_source', DEFAULT_OI_LABEL)
+                oi_mode = OI_LABELS.get(oi_label, 'auto')
+                st.session_state['csv_gex_current_source']['oi_mode'] = oi_mode
+                iv_label = st.session_state.get(
+                    'csv_gex_iv_units',
+                    'Rilevamento automatico (blocco se IV ambigua)',
+                )
+                iv_mode = MODE_BY_LABEL.get(iv_label, 'auto')
                 if oi_mode == "csv":
                     gex_report = _cached_gex(csv_bytes, symbol, iv_mode)
                 else:
-                    # Current OCC OI cannot legitimately overwrite an OLD CSV.
-                    # Do not hit the network until the capture date is checked.
+                    # Non associare OI OCC corrente a una foto CSV storica.
                     from datetime import timezone
                     from cboe_csv_import import csv_to_snapshot
                     from csv_gex_core.calendar import NY
                     from csv_gex_oi import OiSourceError
-                    from csv_gex_core.models import parse_occ
                     occ_values, occ_provenance, occ_error = None, None, None
                     try:
                         doc = csv_to_snapshot(csv_bytes, symbol)
@@ -171,7 +176,7 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
                     (csv_sha256, symbol, iv_mode, oi_mode), gex_report,
                 )
             except Exception as exc:
-                # Il codice del NET GAMMA non dipende dal modello GEX.
+                # Fallback controllato: il NET GAMMA NON dipende dal GEX.
                 st.session_state['csv_gex_last_error'] = (
                     type(exc).__name__ + ': ' + str(exc)[:250]
                 )
