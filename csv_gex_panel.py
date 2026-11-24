@@ -95,10 +95,43 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
             hovertemplate=name + " %{x:,.2f}<extra></extra>",
         ))
 
+    def point_on_curve(price):
+        """Interpolazione LINEARE soltanto tra i 201 punti già calcolati.
+
+        Serve esclusivamente alla posizione verticale del marker:
+        non modifica curve, spot, Gamma, regime o livelli GEX.
+        Mai estrapolare un valore fuori dai prezzi della fotografia.
+        """
+        if price is None or len(xs) < 2:
+            return None
+        for i in range(1, len(xs)):
+            x0, x1 = xs[i - 1], xs[i]
+            if x0 <= price <= x1 and x1 > x0:
+                weight = (price - x0) / (x1 - x0)
+                return ys[i - 1] + weight * (ys[i] - ys[i - 1])
+        return None
+
+    def marker_on_curve(price, name, color, edge, size):
+        ordinate = point_on_curve(price)
+        if ordinate is None:
+            return
+        fig.add_trace(go.Scatter(
+            x=[price], y=[ordinate], mode="markers", name=name,
+            marker=dict(size=size, color=color,
+                        line=dict(width=1.6, color=edge)),
+            hovertemplate=(
+                f"{name}<br>Prezzo %{{x:,.2f}}<br>"
+                "NET GEX teorico %{y:+.3f} mld/1%<extra></extra>"
+            ),
+        ))
+
     display_symbol = gex_price_label(symbol)
-    vertical(gex_display_price(spot, symbol, es_spx_basis),
-             f"Spot CSV · {display_symbol} equivalente" if symbol == "SPX"
-             else f"Spot CSV · {display_symbol}", "#dbe1ec", "dot")
+    marker_on_curve(
+        gex_display_price(spot, symbol, es_spx_basis),
+        f"Spot CSV · {display_symbol} equivalente" if symbol == "SPX"
+        else f"Spot CSV · {display_symbol}",
+        "#e5e7eb", "#9ca3af", 10,
+    )
     for field, label, color, dash in (
         ("call_wall", "Call Wall", "#8fe10a", "solid"),
         ("put_wall", "Put Wall", "#9b4de1", "solid"),
@@ -107,13 +140,16 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
         vertical(gex_display_price(report[field], symbol, es_spx_basis),
                  f"{label} · {display_symbol}", color, dash)
 
-    # Prezzo reale futures: fonte/tempo diversi dal CSV. Non ricalcola GEX,
-    # non allarga la curva di un CSV storico e non crea un prezzo sintetico.
+    # Prezzo reale futures: fonte/tempo diversi dal CSV. Il pallino indica
+    # soltanto il NET GEX teorico in corrispondenza di QUEL prezzo, tramite
+    # interpolazione sulla curva immutata. Nessun punto se fuori range.
     if quote_inside_curve(report, es_quote, symbol=symbol,
                           es_spx_basis=es_spx_basis):
         actual = float(es_quote["price"])
-        vertical(actual, f"ES Yahoo · {actual:,.2f} ({es_quote['symbol']})",
-                 "#fb923c", "dashdot", 2)
+        marker_on_curve(
+            actual, f"ES Yahoo · {actual:,.2f} ({es_quote['symbol']})",
+            "#fb923c", "#fdba74", 12,
+        )
 
     extrema = curve_extrema(report, symbol=symbol, es_spx_basis=es_spx_basis)
     if extrema:
