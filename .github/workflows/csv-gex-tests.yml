@@ -28,6 +28,7 @@ on:
       - tests/test_csv_gex_iv_inference.py
       - tests/test_csv_gex_pine.py
       - tests/test_csv_gex_es_display.py
+      - tests/test_csv_gex_chart_layout.py
       - tests/test_csv_gex_automatic_flow.py
       - tests/test_csv_gex_service_import.py
       - tests/test_csv_gex_quality_gate.py
@@ -70,5 +71,7 @@ jobs:
         run: python -m unittest discover -s tests -p test_csv_gex_automatic_flow.py -v
       - name: GEX SPX solo livelli ES e curve convertite con basis corrente
         run: python -m unittest discover -s tests -p test_csv_gex_es_display.py -v
+      - name: Grafici GEX Plotly leggibili, legenda curva e selezione range strike
+        run: python -m unittest discover -s tests -p test_csv_gex_chart_layout.py -v
       - name: Pre-existing root-filter regression
         run: python -m unittest discover -s tests -p test_csv_root_filter.py -v
