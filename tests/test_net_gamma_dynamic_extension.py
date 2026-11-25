@@ -192,7 +192,7 @@ class ExtendedNetGammaTests(unittest.TestCase):
         source = (Path(__file__).resolve().parents[1] /
                   "gamma_section.py").read_text(encoding="utf-8")
         self.assertIn("computed_profiles.values(), require_core=True", source)
-        self.assertIn("max_strikes=200,  # margine adattivo", source)
+        self.assertIn("max_strikes=200, buffer_pct=fallback_buffer", source)
         self.assertNotIn("buffer_pct=.05, max_strikes=200", source)
         self.assertIn("'Estensione intelligente NET GAMMA — solo grafici'", source)
         self.assertNotIn("Audit: differenza tra NET GAMMA originale e profili estesi", source)
