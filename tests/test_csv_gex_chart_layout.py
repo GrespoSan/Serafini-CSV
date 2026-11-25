@@ -132,7 +132,7 @@ class GEXChartLayoutTests(unittest.TestCase):
         self.assertEqual(fig.layout.legend.orientation, "h")
         names = [trace.name for trace in fig.data]
         for key in ("Curva NET GEX", "Call Wall · ES", "Put Wall · ES",
-                    "Gamma Flip · ES", "Spot CSV · ES equivalente",
+                    "Gamma Flip · ES", "Spot modello GEX · ES equivalente",
                     "ES Yahoo · 7,250.25 (ESZ26.CME)"):
             self.assertIn(key, names)
         self.assertEqual(len(fig.layout.annotations or ()), 0)
@@ -149,7 +149,7 @@ class GEXChartLayoutTests(unittest.TestCase):
             es_quote={"price": actual, "symbol": "ESZ26.CME"},
         )
         spot_trace = next(t for t in fig.data
-                          if t.name == "Spot CSV · ES equivalente")
+                          if t.name == "Spot modello GEX · ES equivalente")
         yahoo_trace = next(t for t in fig.data
                            if t.name == "ES Yahoo · 7,250.25 (ESZ26.CME)")
         self.assertEqual(spot_trace.mode, "markers")
@@ -186,7 +186,7 @@ class GEXChartLayoutTests(unittest.TestCase):
                            es_spx_basis=17.0, es_quote=None)
         self.assertEqual(
             next(t for t in fig.data
-                 if t.name == "Spot CSV · ES equivalente").mode,
+                 if t.name == "Spot modello GEX · ES equivalente").mode,
             "markers",
         )
         self.assertFalse(any(t.name.startswith("ES Yahoo")
