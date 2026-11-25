@@ -39,11 +39,12 @@ jobs:
           report={"curve":grid,"call_wall":7248,"put_wall":7238,"flip":7240}
           quote={"price":7261.25,"symbol":"ESZ26.CME"}
           fig=_curve_chart(report,7242,symbol="SPX",es_spx_basis=17,es_quote=quote)
-          assert len(fig.data)==3, len(fig.data)
-          marks=[shape for shape in fig.layout.shapes
-                 if getattr(shape,"x0",None)==7261.25]
-          assert marks, "Actual ES mark was not drawn"
-          assert fig.data[1].x[0]==7269.0, fig.data[1].x[0]
+          traces={t.name:t for t in fig.data}
+          assert len(fig.data)==8, len(fig.data)
+          marks=[t for t in fig.data if t.name.startswith("ES Yahoo") and t.mode=="markers"]
+          assert len(marks)==1 and marks[0].x[0]==7261.25, "Actual ES mark missing"
+          assert traces["Picco MAX"].x[0]==7269.0
+          assert traces["Spot modello GEX · ES equivalente"].x[0]==7259.0
           print("STREAMLIT_PLOTLY_ES_AND_EXTREMA_OK")
           PY
       - name: New OCC source / futures quote / extrema no-network regression
