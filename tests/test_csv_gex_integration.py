@@ -118,6 +118,7 @@ class GEXCSVTests(unittest.TestCase):
 
     def test_spx_occ_weekly_roots_use_same_engine(self):
         source = fixture()
+        source = source.replace(b"9:00 AM EST", b"10:00 AM EST")
         source = source.replace(b"NVIDIA CORPORATION (NVDA)",
                                 b"S&P 500 INDEX (^SPX)").replace(b"NVDA", b"SPXW")
         result = analyze_csv_gex(source, "SPX")
