@@ -139,13 +139,34 @@ per tutte le analisi originali Serafini e per C1/P1. L'opzione
 e in TradingView, ma NON aggiunge strike quando il nucleo originale
 copre già il range noto e il margine di sicurezza.
 
-La fascia ex ante considera la chiusura precedente e lo spot del CSV;
-quando la cache M15 precedente certifica 27 barre RTH complete, include
-anche quegli estremi convertiti da ES con basis verificato. Il margine
-è adattivo: massimo tra 0,25% del riferimento, due passi mediani
-degli strike e 20% dell'escursione dei prezzi già noti, con tetto
-massimo di 1% del riferimento. Se i 50 strike coprono la fascia,
-si usano ESATTAMENTE i 50 originali nel grafico e nel Pine.
+La fascia ex ante considera la chiusura precedente, lo spot del CSV
+e, quando verificabili, **gli estremi delle ultime 3–5 sedute RTH M15
+complete precedenti alla fotografia (preferibilmente 5)**. L'analisi
+riutilizza il dataset Yahoo ES=F già scaricato per StdDev, ma valida
+indipendentemente gli OHLC di ciascuna RTH (27 barre M15 con orari
+Chicago, nessun buco). Anche quando i 350 close della StdDev non sono
+verificabili, un range RTH può essere verificato a parte.
+Gli estremi ES sono proiettati nella fascia SPX con il differenziale
+ES-SPX corrente **solo per visualizzare gli strike**, non come serie
+storica SPX certificata. La trasformazione non modifica NET GAMMA/GEX.
+
+Quando il range recente è valido, il margine resta adattivo: massimo tra
+0,25% del riferimento, due passi mediani degli strike e il 20%
+dell'escursione dei prezzi già noti, con tetto dell'1% del riferimento.
+Se i 50 strike coprono la fascia, grafico e Pine restano ESATTAMENTE sui
+50 originali per scadenza.
+
+**Fallback di sicurezza:** se il range M15 recente o il differenziale
+ES-SPX non sono verificabili, l'app sceglie una fascia più ampia ±5%
+rispetto a riferimento e spot del CSV (non viene falsamente presentata
+come movimento effettivamente osservato). Riempie solo con veri strike
+Cboe disponibili. L'app mostra in chiaro la copertura e l'obiettivo
+convertiti in ES per il mercato SP500.
+
+Il Pine non interroga né Yahoo né Cboe: l'estensione visibile su
+TradingView dipende dai dati già inseriti nel Pine al momento del download.
+Per sfruttare il nuovo range serve **scaricare nuovamente il Pine**
+dopo aver ricaricato il CSV.
 
 Quando non bastano, vengono aggiunti solo strike reali Cboe sul
 lato scoperto (o su entrambi se necessario), fino a **200 strike per
@@ -161,7 +182,7 @@ margine per le baselines, proiezioni e fino a sei linee GEX, entro il
 limite di 500 linee TradingView.
 
 Test dedicati: `tests/test_csv_gex_quality_gate.py` e
-`tests/test_net_gamma_dynamic_extension.py`.
+`tests/test_net_gamma_dynamic_extension.py` e `tests/test_serafini_recent_rth.py`.
 
 ## Test e gestione futura
 
