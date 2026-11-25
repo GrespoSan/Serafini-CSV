@@ -202,7 +202,7 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
                     st.caption("MT4: 100 strike reali per scadenza (50+50); il nucleo 25+25 resta invariato. Stesso feed manuale di SPX.")
                     if st.button("INVIA A MT4", type="primary", key="csv_mt4_send"):
                         try:
-                            from mt4_manual import build_feed, publish, ManualStore, published_gex_summary
+                            from mt4_manual import build_feed, publish, ManualStore
                             payload = build_feed(
                                 asia_panel["snapshot"], asia_panel["reference_spx"],
                                 asia_panel["es_spx_basis"], asia_panel["basis_info"],
@@ -214,10 +214,7 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
                                                  st.secrets.get("SUPABASE_SERVICE_ROLE_KEY"))
                             publish(target, payload, role)
                             st.success("CSV manuale pubblicato e verificato nel feed privato MT4.")
-                            sent_gex = published_gex_summary(payload)
-                            if sent_gex:
-                                st.caption(sent_gex)
-                            else:
+                            if b"gex_model," not in payload:
                                 st.warning("NET GAMMA inviato; GEX N/D: fotografia o modello non validi per GEX.")
                         except Exception as exc:
                             st.error("Invio MT4 non riuscito: " +
