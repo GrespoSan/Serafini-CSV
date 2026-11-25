@@ -15,7 +15,6 @@ from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
-import yfinance as yf
 
 CHICAGO = ZoneInfo("America/Chicago")
 
@@ -217,6 +216,9 @@ def compute_cash_levels(candles, day: date):
 def serafini_cash_levels(day: date):
     """Un'unica richiesta M15, anche gli insuccessi sono cache per 6 ore."""
     try:
+        # Import locale: il controllo OHLC puro e i test non dipendono dalla
+        # disponibilità della libreria di download. Streamlit reale la include.
+        import yfinance as yf
         start = (day - timedelta(days=42)).isoformat()
         stop = (day + timedelta(days=1)).isoformat()
         raw = yf.download("ES=F", start=start, end=stop, interval="15m",
