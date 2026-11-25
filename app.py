@@ -8,8 +8,11 @@ st.set_page_config(page_title="Serafini · Analisi CSV", page_icon="📊", layou
 
 def verifica_password():
     inserita = st.session_state.pop("password_input", "")
+    from mt4_manual import login_role
     configurata = st.secrets["APP_PASSWORD"]
-    st.session_state.accesso = hmac.compare_digest(inserita.encode(), configurata.encode())
+    role = login_role(inserita, configurata, st.secrets.get("ADMIN_PASSWORD"))
+    st.session_state.accesso = role is not None
+    st.session_state.role = role
 
 def esci():
     st.session_state.clear()
@@ -29,6 +32,12 @@ if not st.session_state.get("accesso"):
     if st.session_state.get("accesso") is False:
         st.error("Password errata.")
     st.stop()
+# Sessions created before the role upgrade remain read-only until a new login.
+role = st.session_state.get("role", "friend")
+from mt4_manual import admin_enabled
+if not admin_enabled(st.secrets.get("APP_PASSWORD"), st.secrets.get("ADMIN_PASSWORD")):
+    role = "friend"
+st.sidebar.caption("Accesso: " + ("Amministratore" if role == "admin" else "Lettore"))
 st.sidebar.button("Esci", on_click=esci)
 from csv_market import MARKETS, render_market, ticker_azione_da_csv
 from offline_snapshot import load_local_snapshot, InvalidLocalSnapshot
@@ -189,6 +198,27 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
                 snaps = store.list(f"{week}/snapshots/")
                 st.session_state[f"serafini_selected_snapshot_{week}"] = store.filename
                 asia_panel = render(store, week, snaps, [], show_heading=False, selector_external=True)
+                if role == "admin" and asia_panel:
+                    st.caption("MT4: 100 strike reali per scadenza (50+50); il nucleo 25+25 resta invariato. Stesso feed manuale di SPX.")
+                    if st.button("INVIA A MT4", type="primary", key="csv_mt4_send"):
+                        try:
+                            from mt4_manual import build_feed, publish, ManualStore
+                            payload = build_feed(
+                                asia_panel["snapshot"], asia_panel["reference_spx"],
+                                asia_panel["es_spx_basis"], asia_panel["basis_info"],
+                                st.session_state.get("csv_gex_current_source"),
+                                st.session_state.get("csv_gex_last_report"),
+                                st.session_state.get("csv_gex_iv_units", ""),
+                            )
+                            target = ManualStore(st.secrets.get("SUPABASE_URL"),
+                                                 st.secrets.get("SUPABASE_SERVICE_ROLE_KEY"))
+                            publish(target, payload, role)
+                            st.success("CSV manuale pubblicato e verificato nel feed privato MT4.")
+                            if b"gex_model," not in payload:
+                                st.warning("NET GAMMA inviato; GEX N/D: fotografia o modello non validi per GEX.")
+                        except Exception as exc:
+                            st.error("Invio MT4 non riuscito: " +
+                                     (str(exc) if isinstance(exc, ValueError) else type(exc).__name__))
             else:
                 photo_day = render_market(upload, symbol, equity)
         except (InvalidLocalSnapshot, InvalidCboeCSV, ValueError) as exc:
