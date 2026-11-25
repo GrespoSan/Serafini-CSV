@@ -20,6 +20,79 @@ import yfinance as yf
 CHICAGO = ZoneInfo("America/Chicago")
 
 
+
+def compute_recent_rth_range(candles, day: date, *, sessions: int = 5):
+    """Range ES=F delle ultime 3-5 sedute RTH M15 COMPLETE prima del giorno.
+
+    Riuso dell'UNICO dataset già acquisito per StdDev: nessuna richiesta,
+    interpolazione o uso di barre del giorno della fotografia. Se uno dei
+    giorni con barre RTH presenta un buco, la fascia viene rifiutata.
+    Il valore è un ancoraggio per la sola ESTENSIONE GRAFICA del NET GAMMA,
+    non un livello SPX ufficiale né un differenziale storico certificato.
+    """
+    if not isinstance(day, date) or not 3 <= sessions <= 5:
+        raise ValueError("Finestra RTH richiesta non valida")
+    if (candles is None or candles.empty or candles.index.tz is None
+            or not {"High", "Low"}.issubset(candles.columns)):
+        raise ValueError("OHLC Yahoo M15 con High/Low e fuso non disponibili")
+
+    hi = pd.to_numeric(candles["High"], errors="coerce")
+    lo = pd.to_numeric(candles["Low"], errors="coerce")
+    if isinstance(hi, pd.DataFrame) or isinstance(lo, pd.DataFrame):
+        raise ValueError("Richiesta una sola serie ES M15 High/Low")
+    frame = pd.DataFrame(
+        {"high": hi.to_numpy(), "low": lo.to_numpy()},
+        index=candles.index.tz_convert(CHICAGO),
+    )
+    frame = frame[~frame.index.duplicated(keep="last")].sort_index()
+    clock_minutes = frame.index.hour * 60 + frame.index.minute
+    frame = frame.loc[
+        (frame.index.date < day) & (frame.index.dayofweek < 5)
+        & (clock_minutes >= 8 * 60 + 30)
+        & (clock_minutes < 15 * 60 + 15)
+    ]
+    available_days = sorted(set(frame.index.date))
+    selected_days = available_days[-sessions:]
+    if len(selected_days) < 3:
+        raise ValueError("Meno di tre sedute RTH precedenti disponibili")
+    if (day - selected_days[-1]).days > 5:
+        raise ValueError("Ultima seduta RTH disponibile troppo lontana")
+
+    verified = []
+    for d in selected_days:
+        observed = frame.loc[frame.index.date == d]
+        expected = pd.date_range(
+            start=pd.Timestamp(d).tz_localize(CHICAGO)
+                  + pd.Timedelta(hours=8, minutes=30),
+            periods=27, freq="15min",
+        )
+        if len(observed) != 27 or not observed.index.equals(expected):
+            raise ValueError(
+                f"RTH Yahoo {d.isoformat()}: richieste 27 M15 complete"
+            )
+        if (not observed.notna().all().all()
+                or not observed.apply(lambda v: v.map(math.isfinite)).all().all()
+                or (observed["high"] < observed["low"]).any()
+                or (observed["low"] <= 0).any()):
+            raise ValueError(f"OHLC Yahoo non valido nella seduta {d.isoformat()}")
+        verified.append(observed)
+
+    low = min(float(v["low"].min()) for v in verified)
+    high = max(float(v["high"].max()) for v in verified)
+    if not (math.isfinite(low) and math.isfinite(high)
+            and 0 < low <= high):
+        raise ValueError("Range RTH storico non finito o incoerente")
+    return {
+        "recent_rth_low_es": low,
+        "recent_rth_high_es": high,
+        "recent_rth_sessions": len(verified),
+        "recent_rth_start_chicago": selected_days[0].isoformat(),
+        "recent_rth_end_chicago": selected_days[-1].isoformat(),
+        "recent_rth_source": "Yahoo Finance ES=F · M15 RTH verificata",
+    }
+
+
+
 def compute_cash_levels(candles, day: date):
     """Deterministico su M15 OHLC; gli indici rappresentano APERTURE M15."""
     if candles is None or candles.empty or candles.index.tz is None:
@@ -157,10 +230,26 @@ def serafini_cash_levels(day: date):
                 if "Close" in raw.columns.get_level_values(level):
                     raw.columns = raw.columns.get_level_values(level)
                     break
-        return compute_cash_levels(raw, day)
+        # La verifica multiseduta è INDIPENDENTE dai 350 close StdDev:
+        # se un buco rende sigma indisponibile, gli estremi degli ultimi
+        # giorni completi possono comunque essere verificati autonomamente.
+        try:
+            recent = compute_recent_rth_range(raw, day)
+        except (ValueError, TypeError, OverflowError) as range_exc:
+            recent = {"recent_rth_reason": str(range_exc)[:180]}
+        try:
+            levels = compute_cash_levels(raw, day)
+        except Exception as sigma_exc:
+            levels = {
+                "status": "NON DISPONIBILE",
+                "reason": f"{type(sigma_exc).__name__}: {str(sigma_exc)[:140]}",
+                "source": "Yahoo Finance ES=F M15",
+            }
+        return {**levels, **recent}
     except Exception as exc:
         return {"status": "NON DISPONIBILE",
                 "reason": f"{type(exc).__name__}: {str(exc)[:140]}",
+                "recent_rth_reason": "OHLC Yahoo M15 non acquisibile",
                 "source": "Yahoo Finance ES=F M15"}
 
 
