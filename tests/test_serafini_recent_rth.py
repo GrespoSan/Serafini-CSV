@@ -92,18 +92,23 @@ class RecentRTHTests(unittest.TestCase):
             compute_recent_rth_range(data, CAPTURE_DAY)
 
     def test_extreme_low_results_in_real_strikes_below_core(self):
-        from tests.test_net_gamma_dynamic_extension import (
-            snapshot, DAY,
-        )
-        snap = snapshot()
-        core = profile(snap, DAY, 6000.0)
+        daycode = CAPTURE_DAY.strftime("%y%m%d")
+        snap = {"data": {"options": [
+            {
+                "option": f"SPXW{daycode}{side}{strike * 1000:08d}",
+                "gamma": .03, "open_interest": 100, "volume": 20,
+            }
+            for strike in range(5500, 6501)
+            for side in ("C", "P")
+        ]}}
+        core = profile(snap, CAPTURE_DAY, 6000.0)
         # Trasferimento puramente grafico del range RTH nel riferimento
         # SPX con un offset noto; nucleo 25+25 invariato.
         data = compute_recent_rth_range(cash_history(), CAPTURE_DAY)
         visual = visual_profile(
-            snap, core, DAY, 6000, spot=6005,
-            known_low=data["recent_rth_low_es"] - 940,
-            known_high=data["recent_rth_high_es"] - 940,
+            snap, core, CAPTURE_DAY, 6000, spot=6005,
+            known_low=data["recent_rth_low_es"] - 1000,
+            known_high=data["recent_rth_high_es"] - 1000,
         )
         self.assertEqual(visual["decision"], "estesa_entrambi")
         self.assertTrue(visual["need_low"])
