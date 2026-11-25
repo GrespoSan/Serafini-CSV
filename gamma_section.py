@@ -545,18 +545,21 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             if show_visual_extension and visual.get('requested_low') is not None:
                 covered = bool(visual.get('coverage_complete'))
                 omitted = visual.get('sampled_strikes', 0)
+                shift = float(offset) if offset is not None and math.isfinite(offset) else 0.0
+                axis = 'ES' if offset is not None and math.isfinite(offset) else 'SPX'
                 if visual.get('decision') == '50_sufficienti':
                     st.caption(
-                        "Estensione intelligente: i 50 strike originali "
-                        "coprono già il range e il margine; nessuno strike "
-                        "aggiuntivo inserito nel grafico o nel Pine."
+                        f"Estensione intelligente: i 50 strike originali "
+                        f"coprono già il range {axis} e il margine; nessuno "
+                        f"strike aggiuntivo nel grafico o nel Pine."
                     )
                 else:
                     st.caption(
-                        f"Copertura NET GAMMA grafica SPX "
-                        f"{visual['actual_low']:.2f}–{visual['actual_high']:.2f}"
-                        f" · obiettivo {visual['requested_low']:.2f}–"
-                        f"{visual['requested_high']:.2f}"
+                        f"Copertura NET GAMMA grafica {axis} "
+                        f"{visual['actual_low'] + shift:,.2f}–"
+                        f"{visual['actual_high'] + shift:,.2f}"
+                        f" · obiettivo {visual['requested_low'] + shift:,.2f}–"
+                        f"{visual['requested_high'] + shift:,.2f}"
                         + (" · estremi coperti" if covered else
                            " · fascia non interamente coperta dai dati Cboe")
                         + (f" · {omitted} strike Cboe tralasciati per limite "
