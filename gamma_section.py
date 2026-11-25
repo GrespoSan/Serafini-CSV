@@ -389,27 +389,45 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     show_visual_extension = st.checkbox(
         'Estensione intelligente NET GAMMA — solo grafici',
         value=True, key='gamma_visual_extension_v1',
-        help='ON di default. Se il nucleo 25+25 copre i prezzi noti e un '
-             'piccolo margine adattivo, visualizza soltanto 50 strike. '
-             'Altrimenti estende solo dove serve, massimo 200 strike reali '
-             'Cboe per scadenza. Usa chiusura precedente, spot della foto '
-             'e, quando verificati, estremi RTH precedenti. '
-             'Non modifica NET GAMMA e C1/P1.'
+        help='ON di default. Copertura sui prezzi noti della fotografia '
+             'e sul range delle ultime 3-5 sedute RTH M15 complete ES=F '
+             '(preferibilmente 5), con basis ES-SPX attuale per la sola '
+             'proiezione grafica. Se non verificabile: sicurezza ±5% SPX. '
+             'Fino a 200 strike Cboe reali/scadenza; 25+25 originali, '
+             'calcoli Serafini, C1/P1 e GEX invariati.'
     )
     known_low = known_high = None
-    range_reference = 'SPX chiusura precedente + spot Cboe'
-    if sigma_levels and sigma_levels.get('status') == 'VALIDO' and offset is not None:
-        previous_low = sigma_levels.get('previous_rth_low_es')
-        previous_high = sigma_levels.get('previous_rth_high_es')
-        if previous_low is not None and previous_high is not None:
-            candidate_low = float(previous_low) - float(offset)
-            candidate_high = float(previous_high) - float(offset)
-            # Evita di usare un dato in conflitto con il riferimento SPX.
-            if (0 < candidate_low <= candidate_high
+    range_reference = 'Chiusura SPX precedente e spot fotografia Cboe'
+    # Senza le 5 RTH complete e un basis ES-SPX utilizzabile, i soli
+    # 50 strike possono occultare escursioni importanti (es. 23/11).
+    # Fallback cautelativo: fascia ±5%, usando SOLO strike reali del CSV.
+    # Non afferma che il prezzo sia realmente stato in quella fascia.
+    fallback_buffer = .05
+    if sigma_levels and offset is not None and math.isfinite(float(offset)):
+        last_session = sigma_levels.get('recent_rth_end_chicago')
+        recent_count = sigma_levels.get('recent_rth_sessions')
+        recent_low = sigma_levels.get('recent_rth_low_es')
+        recent_high = sigma_levels.get('recent_rth_high_es')
+        if (recent_low is not None and recent_high is not None
+                and isinstance(recent_count, int) and 3 <= recent_count <= 5
+                and last_session is not None):
+            candidate_low = float(recent_low) - float(offset)
+            candidate_high = float(recent_high) - float(offset)
+            # Solo sessioni CHIUSE prima del giorno CSV; mai includere
+            # la seduta corrente o prezzi futuri per gli storici.
+            if (date.fromisoformat(str(last_session)) < day
+                    and 0 < candidate_low <= candidate_high
                     and abs(candidate_low / ref - 1.0) < .15
                     and abs(candidate_high / ref - 1.0) < .15):
                 known_low, known_high = candidate_low, candidate_high
-                range_reference += ' + RTH precedente ES (basis verificato)'
+                fallback_buffer = None  # marginazione adattiva del motore
+                range_reference = (
+                    f'{recent_count} sedute RTH complete ES=F '
+                    f'{sigma_levels["recent_rth_start_chicago"]}–'
+                    f'{last_session} · minimo {float(recent_low):,.2f} '
+                    f'· massimo {float(recent_high):,.2f} ES '
+                    '(basis attuale costante; solo grafica)'
+                )
     visual_profiles = {}
     for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
         if title not in computed_profiles:
@@ -421,7 +439,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         try:
             visual_profiles[title] = visual_profile(
                 snap, core, expiry, ref, snap['data'].get('current_price'),
-                max_strikes=200,  # margine adattivo predefinito nel motore
+                max_strikes=200, buffer_pct=fallback_buffer,
                 known_low=known_low, known_high=known_high,
             )
         except (ValueError, TypeError, KeyError, OverflowError) as exc:
@@ -429,11 +447,22 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                        'Mostro soltanto i 50 strike Serafini originali.')
             visual_profiles[title] = core
     if show_visual_extension:
-        st.caption('Estensione intelligente: ' + range_reference +
-                   ' · margine adattivo basato su griglia strike e '
-                   'ampiezza dei prezzi già noti (0,25–1% del riferimento). '
-                   'Se bastano 25+25 non aggiunge nulla; altrimenti estende '
-                   'solo il lato scoperto, fino a 200 strike reali/scadenza.')
+        if fallback_buffer is None:
+            st.caption(
+                'Estensione intelligente: **' + range_reference + '**. '
+                'Margine adattivo di sicurezza 0,25–1% SPX; '
+                '50 strike se sufficienti, fino a 200 strike Cboe '
+                'autentici/scadenza quando il range multi-seduta lo richiede.'
+            )
+        else:
+            st.caption(
+                'Estensione di sicurezza **±5% dalla fascia del riferimento '
+                'SPX e dello spot Cboe**, perché il range delle ultime '
+                '3–5 RTH complete ES=F non è verificabile (o manca il '
+                'differenziale ES-SPX). Si usano solo strike presenti '
+                'nel CSV, max 200/scadenza. Non è una misurazione del '
+                'range effettivamente percorso.'
+            )
     # Riepilogo CANONICO: solo profili Serafini 25+25, non gli strike
     # selezionati per la grafica. Il valore NON cambia attivando
     # l'estensione, la sua copertura o il suo limite (140/200).
