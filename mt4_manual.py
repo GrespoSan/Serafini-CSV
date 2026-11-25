@@ -141,6 +141,21 @@ def build_feed(doc,ref,basis,basis_info,source,saved,iv_label,now=None):
             writer.writerow([label,expiry.isoformat(),f"{strike:.3f}",f"{strike+basis:.3f}",f"{net:.10f}"])
     return buf.getvalue().encode()
 
+def published_gex_summary(payload):
+    """Describe exactly the serialized MT4 fields, never recompute GEX."""
+    meta = {}
+    for row in csv.reader(io.StringIO(payload.decode("utf-8"))):
+        if row and row[0] == "profile":
+            break
+        if len(row) == 2:
+            meta[row[0]] = row[1]
+    if meta.get("gex_model") != "EDGE_0DTE":
+        return None
+    regime = {"Positive": "POSITIVO", "Negative": "NEGATIVO", "Zero": "NEUTRALE"}[meta["gex_modeled_sign"]]
+    value = float(meta["gex_net_usd_billion_per_1pct"])
+    return f"GEX 0DTE inviato a MT4: {value:+.2f} mld USD / 1% · Regime {regime} · {meta['download_clock_rome']} Roma".replace(".", ",")
+
+
 def publish(store,payload,role):
     if role!="admin": raise PermissionError("Solo amministratore")
     # A separate mutable object, not the immutable archive or automatic MT4 feed.

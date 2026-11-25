@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from unittest.mock import Mock
 from pathlib import Path
 from cboe_csv_import import csv_to_snapshot
-from mt4_manual import build_feed, publish, rows100, SOURCE, login_role, ManualStore
+from mt4_manual import build_feed, publish, rows100, SOURCE, login_role, ManualStore, published_gex_summary
 from net_gamma import profile
 from datetime import date
 
@@ -40,6 +40,7 @@ class ManualMT4Tests(unittest.TestCase):
         self.assertEqual(meta["download_clock_rome"],"10:47:00")
         self.assertEqual(meta["mode"],"Manuale")
         self.assertNotIn("gex_model",meta)
+        self.assertIsNone(published_gex_summary(self.build()))
         for label,expiry in (("0DTE",date(2026,11,23)),("Weekly",date(2026,11,27))):
             rows=[r for r in lines if r[0]==label]
             self.assertEqual(len(rows),100)
@@ -59,6 +60,7 @@ class ManualMT4Tests(unittest.TestCase):
         body=self.build(saved,source).decode()
         self.assertIn("gex_call_wall_es,6116.000000",body)
         self.assertIn("gex_modeled_sign,Negative",body)
+        self.assertIn("-2,00 mld USD / 1% · Regime NEGATIVO",published_gex_summary(body.encode()))
         self.assertNotIn("gex_gamma_flip_es",body)
         report["reports"]["0DTE"]["regime"]="neutral"
         self.assertIn("gex_modeled_sign,Zero",self.build(saved,source).decode())
@@ -103,3 +105,10 @@ class ManualMT4Tests(unittest.TestCase):
             target._download_uncached.return_value=b"wrong"
             with self.assertRaises(RuntimeError):
                 publish(target,payload,"admin")
+
+    def test_negative_metrics_style(self):
+        for path in ("gamma_section.py","mercati/v2_gamma_summary.py"):
+            content=Path(path).read_text()
+            self.assertIn("#f05252",content)
+            self.assertIn("if value < 0",content)
+            self.assertNotIn("put_col.metric(",content)

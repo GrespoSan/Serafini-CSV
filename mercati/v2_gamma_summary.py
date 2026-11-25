@@ -32,12 +32,20 @@ def render_gamma_summary(profiles, *, net_key, call_key, put_key):
     totals = gamma_totals(profiles, net_key=net_key,
                           call_key=call_key, put_key=put_key)
     net_col, call_col, put_col = st.columns(3)
-    net_col.metric("NET GAMMA · Call − Put",
-                   format_gamma_it(totals["net"], signed=True))
-    call_col.metric("GAMMA CALL (+)",
-                    format_gamma_it(totals["call"], signed=True))
-    put_col.metric("GAMMA PUT (−)",
-                   "−" + format_gamma_it(totals["put"]))
+    for col, label, value in (
+        (net_col, "NET GAMMA · Call − Put", totals["net"]),
+        (call_col, "GAMMA CALL (+)", totals["call"]),
+        (put_col, "GAMMA PUT (−)", -totals["put"]),
+    ):
+        color = "#f05252" if value < 0 else "#f1f5f9"
+        formatted = format_gamma_it(value, signed=True).replace("-", "−")
+        with col:
+            st.markdown(
+                '<div style="font-size:0.88rem;color:#d1d5db;margin-bottom:0.35rem">' + label + '</div>'
+                f'<div style="font-size:1.85rem;line-height:1.25;font-weight:400;color:{color};'
+                f'font-variant-numeric:tabular-nums">{formatted}</div>',
+                unsafe_allow_html=True,
+            )
     st.caption("Somma dei soli profili mostrati (scadenze e strike selezionati). "
                "Gamma originali CBOE, non monetari; nessuna esposizione dealer osservata.")
     return totals
