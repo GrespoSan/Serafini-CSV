@@ -22,6 +22,12 @@ def prepare_pine_with_csv_gex(code: str, key: str, *, source_ticker: str,
         report, valid = validate_result(
             st.session_state.get("csv_gex_last_report"), source, mode
         )
+        # In WEEKLY ONLY non trasferire eventuali GEX 0DTE da un'altra
+        # scadenza o da un report incoerente: nessun livello 0DTE in Pine.
+        if "// EXPORT PROFILE: WEEKLY_ONLY" in code:
+            valid = {k: v for k, v in valid.items() if k == "Weekly"}
+            if not valid:
+                raise ValueError("Weekly GEX N/D; resta il solo NET GAMMA Weekly")
         output = append_csv_gex(
             code, report, valid,
             price_factor=price_factor, price_shift=price_shift,
@@ -34,8 +40,8 @@ def prepare_pine_with_csv_gex(code: str, key: str, *, source_ticker: str,
     st.caption(
         f"GEX CSV diagnostico incluso: **{available}** · origine verificata "
         f"SHA256 **{report['sha256'][:12]}** · orario {report['timestamp_rome']} Roma. "
-        "Nel Pine GEX 0DTE acceso e Weekly spento di default; "
-        "puoi modificarli nei parametri TradingView."
+        "Nel Pine GEX 0DTE e Weekly spenti di default; "
+        "puoi attivarli nei parametri TradingView."
     )
     if missing:
         st.warning(f"GEX {missing} N/D: scadenza senza qualità sufficiente, "
