@@ -257,16 +257,25 @@ with st.expander(
     expanded=False,
 ):
     if nyse_status["status"] in ("holiday", "early_close"):
-        # Evidenzia SOLO il testo; nessun riquadro colorato o sfondo extra.
-        # Il calendario mantiene le stesse fonti e lo stesso comportamento.
+        # Stile "Modifica completata": badge verde compatto a pillola,
+        # NON un avviso a tutta larghezza. La festività resta informativa;
+        # il calendario non implica la chiusura di CME o Cboe.
         st.markdown(
-            '<div style="background:transparent;padding:5px 0 12px 0;">'
-            '<div style="color:#ffcf70;font-size:1.12rem;'
-            'font-weight:750;line-height:1.45;">'
+            '<div style="padding:6px 0 12px 0;">'
+            '<div style="display:inline-flex;align-items:center;gap:10px;'
+            'max-width:100%;box-sizing:border-box;'
+            'border-radius:999px;background:#0d3020;'
+            'color:#18d46d;padding:8px 16px;'
+            'font-size:1.04rem;font-weight:750;line-height:1.4;">'
+            '<span aria-hidden="true" style="display:inline-flex;'
+            'align-items:center;justify-content:center;flex-shrink:0;'
+            'width:19px;height:19px;border:2px solid #18d46d;'
+            'border-radius:50%;font-size:13px;line-height:1;">&#10003;</span>'
+            '<span style="overflow-wrap:anywhere;">'
             + escape(f"{nyse_status['title']} — {nyse_status['day']}")
-            + '</div>'
-            '<div style="color:#e5e7eb;font-size:1.00rem;'
-            'line-height:1.55;margin-top:5px;">'
+            + '</span></div>'
+            '<div style="color:#d1d5db;font-size:0.96rem;'
+            'line-height:1.55;margin-top:10px;">'
             + escape(nyse_status["detail"])
             + '</div></div>',
             unsafe_allow_html=True,
