@@ -368,9 +368,20 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             st.caption(f'Rilevamento selezionato: {acquisition_label} · '
                        f'Timestamp Cboe: {timestamp or "n.d."} · '
                        f'Cboe: {quality_label} · file {choice}')
-    st.markdown('**Priorità operativa alle 0DTE:** Serafini richiama un peso numerico del '
-                '**60% per le 0DTE** e del **23% per le Weekly** e, in caso di dubbio, '
-                'privilegia i livelli 0DTE più marcati.')
+    if computed_profiles.get('0DTE', {}).get('rows'):
+        st.markdown(
+            '**Priorità operativa alle 0DTE:** Serafini richiama un peso '
+            'numerico del **60% per le 0DTE** e del **23% per le Weekly** '
+            'e, in caso di dubbio, privilegia i livelli 0DTE più marcati.'
+        )
+    elif computed_profiles.get('Weekly', {}).get('rows'):
+        st.info(
+            '**Solo Weekly disponibile nella fotografia.** '
+            'La priorità Serafini alle 0DTE non si applica perché '
+            'non esistono livelli 0DTE utilizzabili. '
+            'La Weekly resta una lettura autonoma, non un sostituto '
+            'dei livelli 0DTE mancanti.'
+        )
     show_sigma_90 = st.checkbox(
         'Mostra StdDev 90 — solo LONG (Pine v1.4)',
         value=False, key='sigma_show_90_long_v14',
