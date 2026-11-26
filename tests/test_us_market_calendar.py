@@ -59,7 +59,7 @@ class NYSEHolidayContextTests(unittest.TestCase):
                    side_effect=ValueError("Out of calendar range")):
             info = nyse_day_status(date(2026, 11, 26))
         self.assertEqual(info["status"], "unknown")
-        self.assertIn("non", info["detail"].lower())
+        self.assertIn("impossibile accertare", info["detail"].lower())
 
     def test_invalid_day_not_silently_interpreted_as_today(self):
         with self.assertRaises(TypeError):
