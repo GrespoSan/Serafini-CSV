@@ -71,6 +71,10 @@ class NYSEHolidayContextTests(unittest.TestCase):
         self.assertIn('context_suffix = " · 🇺🇸 FESTIVITÀ USA — CASH CHIUSO"', app)
         self.assertIn('context_suffix = " · 🇺🇸 CHIUSURA ANTICIPATA CASH"', app)
         self.assertIn('if nyse_status["status"] in ("holiday", "early_close"):', app)
+        self.assertIn('''        st.info(
+            f"**{nyse_status['title']} — {nyse_status['day']}**''', app)
+        self.assertNotIn('''        st.warning(
+            f"**{nyse_status['title']} — {nyse_status['day']}**''', app)
         self.assertIn('f"[NYSE]({NYSE_SOURCE})', app)
         self.assertIn('f"[Cboe SPX]({CBOE_SOURCE})', app)
         self.assertIn('f"[CME futures ES]({CME_SOURCE})', app)
