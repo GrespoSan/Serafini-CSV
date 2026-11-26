@@ -239,7 +239,43 @@ with st.expander("ANALISI GEX · Edge-style da CSV — modulo indipendente", exp
         st.error("Modulo GEX separato non disponibile: " + type(exc).__name__ +
                  ". Le analisi NET GAMMA precedenti restano utilizzabili.")
 
-with st.expander("ANALISI DEL CONTESTO — News · Volatilità · Trend Daily", expanded=False):
+# Calendario CASH USA indipendente dalla data del CSV caricato: quando
+# l'expander è chiuso deve comunque evidenziare Thanksgiving/chiusure.
+# Non viene usato per inferire prezzi, scadenze 0DTE o orari CME/Cboe.
+from us_market_calendar import today_rome_market_status, NYSE_SOURCE, CBOE_SOURCE, CME_SOURCE
+nyse_status = today_rome_market_status()
+if nyse_status["status"] == "holiday":
+    context_suffix = " · 🇺🇸 FESTIVITÀ USA — CASH CHIUSO"
+elif nyse_status["status"] == "early_close":
+    context_suffix = " · 🇺🇸 CHIUSURA ANTICIPATA CASH"
+else:
+    context_suffix = ""
+
+with st.expander(
+    "ANALISI DEL CONTESTO — News · Volatilità · Trend Daily" + context_suffix,
+    expanded=False,
+):
+    if nyse_status["status"] in ("holiday", "early_close"):
+        st.warning(
+            f"**{nyse_status['title']} — {nyse_status['day']}**  \n"
+            + nyse_status["detail"]
+        )
+        st.caption(
+            "Calendario **mercato azionario cash USA** (non calendario "
+            "futures/opzioni): "
+            f"[NYSE]({NYSE_SOURCE}) · "
+            f"[Cboe SPX]({CBOE_SOURCE}) · "
+            f"[CME futures ES]({CME_SOURCE}). "
+            "Verificare gli orari speciali dei singoli prodotti."
+        )
+    elif nyse_status["status"] == "weekend":
+        st.info(
+            f"**{nyse_status['title']} — {nyse_status['day']}**. "
+            "Non determina automaticamente l'orario di negoziazione "
+            "degli strumenti futures."
+        )
+    elif nyse_status["status"] == "unknown":
+        st.info(nyse_status["detail"])
     iso = (photo_day or datetime.now(ZoneInfo("Europe/Rome")).date()).isocalendar()
     week_label = store.week if store else f"{iso.year}-W{iso.week:02d}"
     st.markdown(f"**Settimana ISO (AAAA-WNN)** · {week_label}")
