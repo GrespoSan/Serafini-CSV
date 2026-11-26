@@ -75,7 +75,7 @@ class NYSEHolidayContextTests(unittest.TestCase):
         self.assertIn('border-radius:999px;background:#0d3020', app)
         self.assertIn('color:#18d46d', app)
         self.assertIn('&#10003;', app)
-        self.assertIn('color:#d1d5db', app)
+        self.assertIn('color:#18d46d;font-size:0.96rem', app)
         self.assertIn('escape(nyse_status["detail"])', app)
         self.assertNotIn('''        st.warning(
             f"**{nyse_status['title']} — {nyse_status['day']}**''', app)
