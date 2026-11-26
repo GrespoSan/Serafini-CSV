@@ -1,5 +1,6 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from html import escape
 import streamlit as st
 import hmac
 import hashlib
@@ -256,11 +257,19 @@ with st.expander(
     expanded=False,
 ):
     if nyse_status["status"] in ("holiday", "early_close"):
-        # Festività e orari ridotti sono informazioni di calendario, non
-        # alert di rischio: blu informativo, non giallo di warning.
-        st.info(
-            f"**{nyse_status['title']} — {nyse_status['day']}**  \n"
-            + nyse_status["detail"]
+        # Evidenzia SOLO il testo; nessun riquadro colorato o sfondo extra.
+        # Il calendario mantiene le stesse fonti e lo stesso comportamento.
+        st.markdown(
+            '<div style="background:transparent;padding:5px 0 12px 0;">'
+            '<div style="color:#ffcf70;font-size:1.12rem;'
+            'font-weight:750;line-height:1.45;">'
+            + escape(f"{nyse_status['title']} — {nyse_status['day']}")
+            + '</div>'
+            '<div style="color:#e5e7eb;font-size:1.00rem;'
+            'line-height:1.55;margin-top:5px;">'
+            + escape(nyse_status["detail"])
+            + '</div></div>',
+            unsafe_allow_html=True,
         )
         st.caption(
             "Calendario **mercato azionario cash USA** (non calendario "
