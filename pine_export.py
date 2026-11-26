@@ -262,3 +262,143 @@ if barstate.islast and validTicker
         drawOdteTopProjections(showExtension ? topCallFull : topCallCore, showExtension ? topPutFull : topPutCore)
 '''
     return append_gex_overlays(code, gex, offset)
+
+
+
+def make_pine_weekly_only(weekly: dict, offset: float, date_text: str,
+                          cboe_stamp: str, acquisition_label: str = '',
+                          *, current_only: bool = True) -> str:
+    """Pine v6 SOLO Weekly se non esiste un profilo NET GAMMA 0DTE valido.
+
+    Non produce uno 0DTE sintetico, né riutilizza un vecchio rilevamento.
+    La validazione dei 25+25 e degli strike grafici è identica al
+    generatore completo; si usa una sola scala manuale e un solo profilo.
+    """
+    if not isfinite(offset):
+        raise ValueError("Differenziale ES-SPX non valido")
+    if not isinstance(weekly, dict) or len(weekly.get("rows") or []) != 50:
+        raise ValueError("Pine Weekly-only: occorrono 25+25 strike originali")
+    original = weekly["rows"]
+    visual = weekly.get("display_rows") or original
+    if not 50 <= len(visual) <= 200:
+        raise ValueError("Pine Weekly-only: ammessi 50-200 strike reali")
+    core = {float(x["strike_spx"]): float(x["net_gamma"]) for x in original}
+    shown = {float(x["strike_spx"]): float(x["net_gamma"]) for x in visual}
+    if (len(core) != 50 or len(shown) != len(visual)
+            or not all(k in shown and abs(shown[k] - v) < 1e-6
+                       for k, v in core.items())):
+        raise ValueError("I 25+25 Weekly devono restare invariati nell'estensione")
+    if not weekly.get("expiry"):
+        raise ValueError("Scadenza Weekly assente")
+    if current_only:
+        try:
+            utc = datetime.strptime(
+                str(cboe_stamp).strip(), "%Y-%m-%d %H:%M:%S"
+            ).replace(tzinfo=timezone.utc)
+            local = utc.astimezone(ZoneInfo("Europe/Rome"))
+        except (ValueError, TypeError) as exc:
+            raise ValueError("Timestamp Cboe non valido") from exc
+        clock = local.strftime("%H:%M")
+        heading = f"Weekly {clock} Roma"
+        title = (
+            "Serafini SPX NET GAMMA WEEKLY ONLY | " +
+            local.strftime("%Y-%m-%d %H:%M") + " Roma"
+        )
+    else:
+        heading = f"Weekly {date_text}"
+        title = f"Serafini SPX NET GAMMA WEEKLY ONLY | {date_text}"
+    source = re.sub(r"[^0-9T: .-]", "", str(cboe_stamp))[:72]
+    clean_label = re.sub(
+        r"[^a-zA-Z0-9À-ÿ :()._-]", "", acquisition_label or ""
+    )[:50]
+    low = min(float(r["strike_spx"]) for r in original) + offset
+    high = max(float(r["strike_spx"]) for r in original) + offset
+    default_scale = _initial_manual_scale([({"rows": visual}, 100)])
+    if not all(isfinite(x) for x in (low, high)) or low >= high:
+        raise ValueError("Range Weekly non valido")
+    code = f'''//@version=6
+indicator("{title}", overlay=true, max_lines_count=500, max_labels_count=20)
+// EXPORT PROFILE: WEEKLY_ONLY
+// 0DTE ASSENTE nello snapshot Cboe: NESSUN livello 0DTE viene generato.
+// Contiene SOLO NET GAMMA Weekly dalla fotografia caricata; nessun replay.
+// Fonte Cboe: {source} · rilevamento: {clean_label or "CSV manuale"}
+// Data fotografia: {date_text} · scadenza Weekly: {weekly["expiry"]}
+// Timestamp Cboe interpretato UTC; ora Roma DST: {heading}
+// Formula Serafini: (OI+Volume)*Gamma Call - (OI+Volume)*Gamma Put.
+// 25 strike sopra e 25 sotto il riferimento SPX: INVARIATI.
+// Estensione solo grafica: fino a 200 strike reali della stessa Weekly.
+// Basis ES-SPX applicato ai prezzi, NON ai NET GAMMA: {offset:.4f}
+
+gammaPerCandle = input.float({default_scale:.1f}, "Scala MANUALE · Gamma/barra", minval=0.1, step=0.1)
+offsetWeekly = input.int(100, "Distanza Weekly da ultima candela", minval=45, maxval=250)
+showExtension = input.bool(true, "Estensione automatica NET GAMMA")
+showCurrentWeekly = input.bool(true, "Mostra Weekly corrente")
+positiveColor = input.color(color.rgb(152, 255, 152), "NET GAMMA positivo")
+negativeColor = input.color(color.rgb(249, 132, 229), "NET GAMMA negativo")
+showTitles = input.bool(true, "Mostra intestazioni")
+labelSizeChoice = input.string("Normale", "Dimensione scritte Pine", options=["Piccola", "Normale", "Grande", "Molto grande"])
+labelTextSize = switch labelSizeChoice
+    "Piccola" => size.small
+    "Normale" => size.normal
+    "Grande" => size.large
+    => size.huge
+validTicker = syminfo.type == "futures" and (syminfo.root == "ES" or syminfo.root == "MES")
+
+var array<float> weeklyLevels = {_pine_array(visual, "strike_spx", offset)}
+var array<float> weeklyValues = {_pine_array(visual, "net_gamma")}
+var array<float> weeklyCoreValues = {_pine_array(original, "net_gamma")}
+float weeklyCoreLow = {low:.8f}
+float weeklyCoreHigh = {high:.8f}
+var array<line> drawnLines = array.new_line()
+var array<label> drawnLabels = array.new_label()
+
+requiredScale(array<float> gamma, int center) =>
+    float maxPos = 0.0
+    float maxNeg = 0.0
+    for g in gamma
+        maxPos := math.max(maxPos, g)
+        maxNeg := math.max(maxNeg, -g)
+    float rightCapacity = float(math.max(1, 480 - center))
+    float leftCapacity = float(9500 + center)
+    math.max(maxPos / rightCapacity, maxNeg / leftCapacity)
+
+renderWeekly(array<float> levels, array<float> gamma, int center, float actualScale) =>
+    int count = array.size(levels)
+    if count > 0
+        float bottom = showExtension ? array.get(levels, 0) : weeklyCoreLow
+        float top = showExtension ? array.get(levels, count - 1) : weeklyCoreHigh
+        line baseline = line.new(center, bottom, center, top, xloc=xloc.bar_index, extend=extend.none, color=color.gray, style=line.style_dotted, width=1)
+        array.push(drawnLines, baseline)
+        for j = 0 to count - 1
+            float level = array.get(levels, j)
+            float g = array.get(gamma, j)
+            int length = g != 0 ? math.max(1, int(math.round(math.abs(g) / actualScale))) : 0
+            if length > 0 and (showExtension or (level >= weeklyCoreLow and level <= weeklyCoreHigh))
+                int farX = center + (g > 0 ? length : -length)
+                line segment = line.new(center, level, farX, level, xloc=xloc.bar_index, extend=extend.none, color=g >= 0 ? positiveColor : negativeColor, width=5)
+                array.push(drawnLines, segment)
+        if showTitles
+            float spacing = count > 1 ? math.max(5.0, (top - bottom) / 20.0) : 10.0
+            label headingLabel = label.new(center, top + spacing, "{heading}", xloc=xloc.bar_index, yloc=yloc.price, color=color.new(color.black, 50), textcolor=color.white, style=label.style_label_down, size=labelTextSize)
+            array.push(drawnLabels, headingLabel)
+
+if barstate.islast and validTicker
+    for segment in drawnLines
+        line.delete(segment)
+    array.clear(drawnLines)
+    for item in drawnLabels
+        label.delete(item)
+    array.clear(drawnLabels)
+    if showCurrentWeekly
+        float actualScale = gammaPerCandle
+        float minimumSafe = requiredScale(showExtension ? weeklyValues : weeklyCoreValues, offsetWeekly)
+        if offsetWeekly >= 480
+            label warningLimit = label.new(bar_index + 10, close, "Distanza Weekly oltre il limite TradingView (+500 barre). Riduci la distanza.", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=labelTextSize)
+            array.push(drawnLabels, warningLimit)
+        else if actualScale + 0.000001 < minimumSafe
+            label warningScale = label.new(bar_index + 10, close, "Scala manuale troppo piccola. Imposta almeno " + str.tostring(math.ceil(minimumSafe * 10) / 10.0, "#.0") + " Gamma/bar", xloc=xloc.bar_index, yloc=yloc.price, style=label.style_label_left, color=color.new(color.orange, 15), textcolor=color.black, size=labelTextSize)
+            array.push(drawnLabels, warningScale)
+        else
+            renderWeekly(weeklyLevels, weeklyValues, bar_index + offsetWeekly, actualScale)
+'''
+    return code
