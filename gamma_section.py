@@ -803,14 +803,41 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
         'es_spx_basis': offset if offset is not None and math.isfinite(offset) else None,
     }
 
-    if offset is not None and all(computed_profiles.get(k, {}).get('rows') for k in ('0DTE', 'Weekly')):
-        from pine_export import make_pine
-        groups = {}
-        for k in ('0DTE', 'Weekly'):
-            groups[k] = dict(computed_profiles[k], display_rows=visual_profiles[k]['rows'])
-        script = make_pine(groups['0DTE'], groups['Weekly'], offset, day.isoformat(),
-                           timestamp, current_only=True)
-        # I calcoli NET GAMMA restano invariati: solo overlay GEX opzionale.
+    # Export in entrambe le condizioni:
+    # A) 0DTE + Weekly originali 25+25 integri;
+    # B) 0DTE assente/insufficiente, Weekly integra -> SOLO Weekly.
+    # Non riutilizza scadenze precedenti né inventa un 0DTE.
+    weekly_data = computed_profiles.get('Weekly')
+    odte_data = computed_profiles.get('0DTE')
+    valid_weekly = bool(weekly_data and len(weekly_data.get('rows') or []) == 50)
+    valid_odte = bool(odte_data and len(odte_data.get('rows') or []) == 50)
+    if offset is not None and math.isfinite(offset) and valid_weekly:
+        from pine_export import make_pine, make_pine_weekly_only
+        weekly_group = dict(weekly_data, display_rows=visual_profiles['Weekly']['rows'])
+        if valid_odte:
+            odte_group = dict(odte_data, display_rows=visual_profiles['0DTE']['rows'])
+            script = make_pine(
+                odte_group, weekly_group, offset, day.isoformat(),
+                timestamp, current_only=True,
+            )
+            weekly_only = False
+        else:
+            script = make_pine_weekly_only(
+                weekly_group, offset, day.isoformat(), timestamp,
+                acquisition_label=acquisition_label, current_only=True,
+            )
+            weekly_only = True
+            reason = (profile_errors.get('0DTE') or
+                      'nessun contratto 0DTE nella fotografia Cboe')
+            st.warning(
+                "**Pine disponibile — SOLO WEEKLY.** "
+                f"0DTE non utilizzabile: {reason}. "
+                f"La Weekly scade il **{weekly_group['expiry']}** "
+                "e usa soltanto strike della fotografia caricata. "
+                "Non viene generato alcun profilo 0DTE; non è una "
+                "conferma operativa di mercato aperto."
+            )
+        # Net Gamma resta invariato. Overlay GEX facoltativo e separato.
         from mercati.pine_ui import prepare_pine_with_csv_gex
         script = prepare_pine_with_csv_gex(
             script, 'spx', source_ticker='SPX',
@@ -818,13 +845,23 @@ La sensibilità delle opzioni non è fissa. Può cambiare perché:
         )
         pine_download_col, pine_copy_col = st.columns(2, gap='small')
         with pine_download_col:
-            st.download_button('Scarica Pine SPX · fotografia corrente', script,
-                               file_name=f'SPX_NET_GAMMA_{day}.pine',
-                               key='pine_download_control')
+            st.download_button(
+                ('Scarica Pine SPX · SOLO WEEKLY' if weekly_only
+                 else 'Scarica Pine SPX · fotografia corrente'),
+                script,
+                file_name=(f'SPX_NET_GAMMA_WEEKLY_ONLY_{day}.pine'
+                           if weekly_only else f'SPX_NET_GAMMA_{day}.pine'),
+                key='pine_download_control',
+            )
         with pine_copy_col:
             with st.container(key='pine_copy_container'):
                 with st.expander('Visualizza e copia codice Pine', expanded=False):
                     st.caption('Usa l’icona Copia in alto a destra del codice per incollarlo in TradingView.')
                     st.code(script, language=None, wrap_lines=False)
+    elif offset is not None and not valid_weekly:
+        st.info(
+            "Pine NET GAMMA non disponibile: mancano anche i "
+            "50 strike originali Weekly. Nessun profilo inventato."
+        )
 
     return {**asia_panel, 'snapshot': snap, 'reference_spx': ref, 'basis_info': auto_result}
