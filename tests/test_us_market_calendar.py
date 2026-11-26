@@ -72,7 +72,9 @@ class NYSEHolidayContextTests(unittest.TestCase):
         self.assertIn('context_suffix = " · 🇺🇸 CHIUSURA ANTICIPATA CASH"', app)
         self.assertIn('if nyse_status["status"] in ("holiday", "early_close"):', app)
         self.assertIn('''        st.markdown(
-            '<div style="padding:6px 0 12px 0;">' ''', app)
+            '<div style="padding:6px 0 12px 0;">' ''', app.replace(
+                "'\n", "' "
+            ))
         self.assertIn('border-radius:999px;background:#0d3020', app)
         self.assertIn('color:#18d46d', app)
         self.assertIn('&#10003;', app)
