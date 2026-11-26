@@ -7,7 +7,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from csv_gex_engine import MODEL_LABEL
 from csv_gex_price_display import gex_display_price, gex_price_label
-from csv_gex_es_quote import fetch_es_quote
+from csv_gex_quote_cache import _cached_es_quote
 from csv_gex_curve import curve_extrema, quote_inside_curve
 from csv_gex_source_display import describe_gex_sources
 # Compatibilità con eventuali import precedenti: cache e configurazione dati
@@ -15,12 +15,6 @@ from csv_gex_source_display import describe_gex_sources
 from csv_gex_services import (
     _cached_gex, _cached_occ, OI_LABELS, DEFAULT_OI_LABEL,
 )
-
-@st.cache_data(show_spinner=False, max_entries=5, ttl=60)
-def _cached_es_quote():
-    """Actual delayed CME quote; chart source timestamp is not the fetch time."""
-    return fetch_es_quote()
-
 
 
 def _number(value):
@@ -162,8 +156,8 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
             fig.add_trace(go.Scatter(
                 x=[item["price"]], y=[item["gex"] / 1e9],
                 mode="markers+text", text=[f"{item['price']:,.2f}"], textposition=position,
-                textfont=dict(size=11, color=color),
-                marker=dict(size=10, color=color,
+                textfont=dict(size=16, color=color, family="Arial"),
+                marker=dict(size=11, color=color,
                             line=dict(width=1, color="#ffffff")),
                 name=label, showlegend=False,
                 hovertemplate=(f"{label}: prezzo %{{x:,.2f}}<br>"
