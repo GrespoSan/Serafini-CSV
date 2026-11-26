@@ -136,6 +136,8 @@ class PineWeeklyOnlyTests(unittest.TestCase):
         self.assertIn("script = make_pine(", src)
         self.assertIn("if offset is not None and math.isfinite(offset) and valid_weekly:", src)
         self.assertIn("Pine NET GAMMA non disponibile:", src)
+        self.assertIn("La priorità Serafini alle 0DTE non si applica", src)
+        self.assertIn("Solo Weekly disponibile nella fotografia.", src)
 
     def test_weekly_only_csv_gex_restricts_overlay_to_weekly(self):
         src = (ROOT / "mercati/pine_ui.py").read_text(encoding="utf-8")
