@@ -256,7 +256,9 @@ with st.expander(
     expanded=False,
 ):
     if nyse_status["status"] in ("holiday", "early_close"):
-        st.warning(
+        # Festività e orari ridotti sono informazioni di calendario, non
+        # alert di rischio: blu informativo, non giallo di warning.
+        st.info(
             f"**{nyse_status['title']} — {nyse_status['day']}**  \n"
             + nyse_status["detail"]
         )
