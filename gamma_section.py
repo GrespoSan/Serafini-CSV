@@ -9,6 +9,8 @@ from net_gamma import profile, read_snapshot, visual_profile, gamma_component_to
 from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
 from gamma_scale import profile_gamma_bounds, gamma_components
+from csv_gex_quote_cache import _cached_es_quote
+from gamma_es_quote_overlay import add_es_quote_to_net_gamma
 from serafini_sigma import serafini_cash_levels, add_sigma_markers
 from operational_levels import find_candidates
 from es_spx_basis import download_and_calculate
@@ -508,6 +510,41 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         key='gamma_independent_scale_v1',
         help='Disattivato: stessa scala per confrontare 0DTE e Weekly. '
              'Attivato: le lunghezze NON sono confrontabili tra i due profili.')
+    show_percent_lines = st.checkbox(
+        "Mostra linee percentuali ±0,5% / ±1% / ±1,5%",
+        value=False, key="gamma_percent_lines_v1",
+        help="Spente per default su 0DTE e Weekly. Riattivandole "
+             "si mostrano solo guide di prezzo rispetto al close ES precedente; "
+             "nessun impatto su NET GAMMA o Pine.",
+    )
+    # Unica cache ES Yahoo condivisa con la curva GEX. E' una
+    # quotazione INDICATIVA, potenzialmente ritardata, NON il prezzo
+    # dello snapshot Cboe e non cambia il differenziale ES-SPX.
+    try:
+        es_quote = (_cached_es_quote() if offset is not None
+                    and math.isfinite(offset) else None)
+    except Exception as quote_error:
+        es_quote = {"price": None, "error": type(quote_error).__name__}
+    if offset is None:
+        st.caption(
+            "Prezzo attuale ES: N/D sui grafici SPX — necessario un "
+            "differenziale ES−SPX valido per allineare la scala."
+        )
+    elif es_quote and es_quote.get("price") is not None:
+        st.caption(
+            f"**Prezzo ES indicativo Yahoo {es_quote['price']:,.2f}** · "
+            f"{es_quote['symbol']} · osservato "
+            f"{es_quote['observed_rome']} Roma · "
+            f"età osservazione {es_quote['age_minutes']:.1f} minuti. "
+            "Quotazione potenzialmente ritardata, indipendente dalla "
+            "fotografia CSV Cboe. La linea arancione compare "
+            "sia su 0DTE sia su Weekly."
+        )
+    else:
+        st.caption(
+            "**Prezzo ES attuale: N/D** — Yahoo non restituisce "
+            "una quotazione verificata recente. Nessun prezzo inventato."
+        )
     profile_cols = st.columns(2, gap='small')
     for (title, expiry), profile_col in zip(
             [('0DTE', day), ('Weekly', weekly_exp)], profile_cols):
@@ -616,27 +653,28 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 )
                 # Guide percentuali rispetto allo STESSO Close prec. ES.
                 # Sono solamente riferimenti grafici; il NET GAMMA resta intatto.
-                for pct in (-1.5, -1.0, -0.5, 0.5, 1.0, 1.5):
-                    target = previous_close_es * (1.0 + pct / 100.0)
-                    emphasis = abs(pct) == 1.0
-                    line_color = ('rgba(205,215,230,0.62)' if emphasis
-                                  else 'rgba(195,205,220,0.46)')
-                    fig.add_hline(
-                        y=target, line_dash='dot',
-                        line_width=1.8 if emphasis else 1.2,
-                        line_color=line_color,
-                    )
-                    fig.add_annotation(
-                        x=0.995, xref='paper', y=target, yref='y',
-                        text=f'{pct:+.1f}%'.replace('.', ','),
-                        showarrow=False, xanchor='right', yanchor='middle',
-                        font=dict(
-                            color=('rgba(225,232,240,0.92)' if emphasis
-                                   else 'rgba(210,218,228,0.82)'),
-                            size=10,
-                        ),
-                        bgcolor='rgba(13,17,23,0.78)', borderpad=1,
-                    )
+                if show_percent_lines:
+                    for pct in (-1.5, -1.0, -0.5, 0.5, 1.0, 1.5):
+                        target = previous_close_es * (1.0 + pct / 100.0)
+                        emphasis = abs(pct) == 1.0
+                        line_color = ('rgba(205,215,230,0.62)' if emphasis
+                                      else 'rgba(195,205,220,0.46)')
+                        fig.add_hline(
+                            y=target, line_dash='dot',
+                            line_width=1.8 if emphasis else 1.2,
+                            line_color=line_color,
+                        )
+                        fig.add_annotation(
+                            x=0.995, xref='paper', y=target, yref='y',
+                            text=f'{pct:+.1f}%'.replace('.', ','),
+                            showarrow=False, xanchor='right', yanchor='middle',
+                            font=dict(
+                                color=('rgba(225,232,240,0.92)' if emphasis
+                                       else 'rgba(210,218,228,0.82)'),
+                                size=10,
+                            ),
+                            bgcolor='rgba(13,17,23,0.78)', borderpad=1,
+                        )
                 # Il riferimento principale rimane visivamente prioritario.
                 fig.add_annotation(
                     x=0.995, xref='paper', y=previous_close_es, yref='y',
@@ -651,7 +689,18 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                     fig, sigma_levels, y, show_90=show_sigma_90)
             else:
                 clipped_sigma = []
+            quote_overlay = add_es_quote_to_net_gamma(
+                fig, y, es_quote, has_es_axis=(
+                    offset is not None and math.isfinite(offset)
+                ),
+            )
             st.plotly_chart(fig, width="stretch", key=f'gamma_net_{title}_{choice}')
+            if quote_overlay.get("shown") and quote_overlay.get("outside_strikes"):
+                st.caption(
+                    "Prezzo ES Yahoo fuori dalla copertura strike del "
+                    f"profilo {title}: scala verticale ampliata per "
+                    "mostrarlo, NET GAMMA e strike invariati."
+                )
             if title == '0DTE':
                 if sigma_error:
                     st.caption('Deviazione Serafini M15 non disponibile: ' + sigma_error)
