@@ -39,6 +39,7 @@ on:
       - tests/test_csv_gex_occ_extrema_es.py
       - tests/test_csv_gex_source_display.py
       - tests/test_net_gamma_dynamic_extension.py
+      - tests/test_pine_weekly_only.py
       - tests/test_serafini_recent_rth.py
       - .github/workflows/csv-gex-tests.yml
   workflow_dispatch:
@@ -75,6 +76,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_net_gamma_dynamic_extension.py -v
       - name: Estensione NET GAMMA su 5 sedute RTH verificate, no lookahead e fallback
         run: python -m unittest discover -s tests -p test_serafini_recent_rth.py -v
+      - name: Pine NET GAMMA Weekly-only per mancanza 0DTE, GEX separato
+        run: python -m unittest discover -s tests -p test_pine_weekly_only.py -v
       - name: Pine GEX controls, source identity, no data fabrication and price conversion
         run: python -m unittest discover -s tests -p test_csv_gex_pine.py -v
       - name: Single CSV automatic GEX and Pine integration
