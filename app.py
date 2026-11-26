@@ -274,7 +274,7 @@ with st.expander(
             '<span style="overflow-wrap:anywhere;">'
             + escape(f"{nyse_status['title']} — {nyse_status['day']}")
             + '</span></div>'
-            '<div style="color:#d1d5db;font-size:0.96rem;'
+            '<div style="color:#18d46d;font-size:0.96rem;'
             'line-height:1.55;margin-top:10px;">'
             + escape(nyse_status["detail"])
             + '</div></div>',
