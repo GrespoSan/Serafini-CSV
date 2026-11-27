@@ -176,6 +176,10 @@ class GEXChartLayoutTests(unittest.TestCase):
         self.assertAlmostEqual(wall_labels[0].y, 7217.0)
         # Cartellino unificato prioritario, sopra CSV/Gamma Flip.
         self.assertEqual(fig.layout.annotations[-1], wall_labels[0])
+        self.assertEqual(wall_labels[0].bgcolor, "#0e4652")
+        self.assertEqual(wall_labels[0].bordercolor, "#22d3ee")
+        self.assertEqual(wall_labels[0].font.color, "#ecfeff")
+        self.assertEqual(wall_labels[0].borderwidth, 2)
         self.assertEqual(len(fig.layout.annotations), 3)
         # Entrambe le linee e le voci di legenda restano indipendenti.
         call = next(t for t in fig.data if t.name == "Call Wall / ES")
@@ -199,6 +203,8 @@ class GEXChartLayoutTests(unittest.TestCase):
         self.assertEqual(len(wall_labels), 2)
         self.assertFalse(any("CALL WALL + PUT WALL" in a.text
                              for a in wall_labels))
+        self.assertTrue(all(a.bordercolor != "#22d3ee"
+                            and a.borderwidth == 1 for a in wall_labels))
         self.assertEqual(sorted(round(a.y, 2) for a in wall_labels),
                          [7217.00, 7217.01])
 
