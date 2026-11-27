@@ -54,12 +54,27 @@ def parse_chart(body: bytes, ticker: str, now: datetime):
                 pairs.append((stamp,val))
         except (TypeError,OverflowError,ValueError,OSError):
             continue
-    if not pairs:
-        raise ValueError("Prezzo ES assente oppure più vecchio di 90 minuti")
-    stamp,price=max(pairs,key=lambda x:x[0])
+    # I chart Yahoo possono avere barre 1m mancanti ma riportare
+    # regularMarketPrice/regularMarketTime aggiornati nel metadata.
+    # Ammessi SOLO con timestamp originale Yahoo entro 90 minuti:
+    # non usare previousClose, fetch time, prezzo CSV o basis sintetico.
     actual=meta.get("symbol")
     if actual and str(actual).upper()!=ticker.upper():
         raise ValueError("Simbolo Yahoo differente dal future richiesto")
+    try:
+        market_price=float(meta["regularMarketPrice"])
+        market_time=datetime.fromtimestamp(
+            int(meta["regularMarketTime"]), timezone.utc
+        )
+        market_age=(now-market_time).total_seconds()/60
+        if (math.isfinite(market_price) and market_price>0
+                and -2<=market_age<=90):
+            pairs.append((market_time,market_price))
+    except (KeyError,TypeError,ValueError,OverflowError,OSError):
+        pass
+    if not pairs:
+        raise ValueError("Prezzo ES assente oppure più vecchio di 90 minuti")
+    stamp,price=max(pairs,key=lambda x:x[0])
     return {
         "price":round(price,4),
         "symbol":ticker,
