@@ -76,5 +76,25 @@ class GexProvenanceTests(unittest.TestCase):
         self.assertIn("if oi.get(\"fallback_reason\"):", panel)
 
 
+    def test_technical_details_are_collapsed_but_auditable(self):
+        panel = (ROOT / "csv_gex_panel.py").read_text(encoding="utf-8")
+        detail = 'with st.expander("Dettagli tecnici · fonti, qualità e metodo", expanded=False):'
+        self.assertIn(detail, panel)
+        before, behind = panel.split(detail, 1)
+        self.assertIn("**Ora fotografia:**", before)
+        self.assertIn("**Ora download OCC:**", before)
+        self.assertIn("**Prezzi in ES/MES**", before)
+        self.assertIn('if oi.get("fallback_reason"):', before)
+        self.assertIn("**Identità CSV:**", behind)
+        self.assertIn("**Data reale OI:**", behind)
+        self.assertIn("**Modello:**", behind)
+        self.assertIn("**Riconciliazione OCC:**", behind)
+        self.assertIn("**SPX implicito dalle opzioni:", behind)
+        self.assertIn('st.caption(info["iv_note"])', behind)
+        self.assertIn('st.html(_gex_summary_card_html(', behind)
+        self.assertNotIn('st.radio("Scadenza GEX"', behind)
+        self.assertEqual(panel.count("**GEX modellato · diagnostico, non certificato.**"), 0)
+
+
 if __name__ == "__main__":
     unittest.main()
