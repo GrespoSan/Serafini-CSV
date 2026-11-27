@@ -817,16 +817,19 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
     )
     if basis_available:
         st.subheader("GEX by Strike · composizione Call / Put — 0DTE (Daily)")
-        st.caption(
-            "**PUTS − a sinistra (viola)** · **CALLS + a destra (verde)**. "
-            "La linea chiara indica il Prezzo CSV alla fotografia "
-            + ("in equivalente ES; NON è la quotazione ES attuale. "
-               "La linea arancione tratteggiata indica il prezzo futures "
-               "Yahoo/Massive validato entro 90 minuti, se disponibile."
-               if symbol == "SPX" else "del sottostante.") +
-            " Wall e Gamma Flip sono contrassegnati da linee orizzontali "
-            "e cartellini a destra. I grafici utilizzano lo stesso report GEX."
-        )
+        st.caption("**PUTS ←** viola · **CALLS →** verde. "
+                   "Prezzi e livelli sono indicati nella legenda.")
+        with st.expander("Come leggere il grafico", expanded=False):
+            st.caption(
+                "**PUTS − a sinistra (viola)** · **CALLS + a destra (verde)**. "
+                "La linea chiara indica il Prezzo CSV alla fotografia "
+                + ("in equivalente ES; NON è la quotazione ES attuale. "
+                   "La linea arancione tratteggiata indica il prezzo futures "
+                   "Yahoo/Massive validato entro 90 minuti, se disponibile."
+                   if symbol == "SPX" else "del sottostante.") +
+                " Wall e Gamma Flip sono contrassegnati da linee orizzontali "
+                "e cartellini a destra. I grafici utilizzano lo stesso report GEX."
+            )
         selected_window = st.segmented_control(
             "Intervallo di prezzo attorno allo spot utilizzato dal modello GEX",
             options=list(GEX_STRIKE_WINDOWS),
