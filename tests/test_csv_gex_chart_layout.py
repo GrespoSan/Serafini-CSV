@@ -48,9 +48,9 @@ class GEXChartLayoutTests(unittest.TestCase):
         figure = '_live_es_strikes('
         self.assertIn(summary, source)
         self.assertIn(help_panel, source)
-        self.assertLess(source.index(title), source.index(summary))
-        self.assertLess(source.index(summary), source.index(help_panel))
-        self.assertLess(source.index(help_panel), source.index(controls))
+        self.assertLess(source.index(title), source.index(help_panel))
+        self.assertLess(source.index(help_panel), source.index(summary))
+        self.assertLess(source.index(summary), source.index(controls))
         self.assertLess(source.index(controls), source.rindex(figure))
         self.assertEqual(source.count('with st.expander("Come leggere il grafico"'), 1)
 
