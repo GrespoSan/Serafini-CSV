@@ -75,10 +75,26 @@ il suo Pine continuano a funzionare **senza alcun livello GEX inventato**.
 Per 0DTE e Weekly i controlli di qualità sono indipendenti; il Pine
 contiene i soli gruppi validi.
 
-## Grafici GEX · curva e profilo per strike
+## Confronto GEX Daily/Weekly e grafici Daily
 
-Nel pannello **ANALISI GEX** sono visibili in sequenza due grafici principali,
-senza expander intermedio:
+La sezione **ANALISI GEX** mostra simultaneamente **due riquadri scuri
+affiancati**, 0DTE (Daily) e Weekly, senza selettore di scadenza.
+Ogni riquadro contiene esclusivamente i 7 valori del report della propria
+scadenza: Call Wall, Put Wall, Gamma Flip, Regime, NET GEX, CALL GEX e
+PUT GEX. I livelli su SPX sono esposti in equivalente ES/MES solo se il
+basis ES−SPX è verificabile; altrimenti i prezzi sono **N/D** mentre le
+esposizioni GEX originali restano rappresentabili. Se una scadenza non
+supera il quality gate, tutta la sua scheda mostra N/D con motivo visibile,
+senza copiare dati dell'altra. Quando Daily e Weekly coincidono nella
+stessa scadenza, viene dichiarato che non sono esposizioni indipendenti.
+
+**Sotto i riquadri ci sono esclusivamente i grafici 0DTE (Daily)**,
+sempre ordinati così: GEX by Strike prima e curva teorica poi.
+Non vengono disegnati grafici Weekly. Se manca un GEX Daily valido, i
+grafici sono N/D ma la scheda Weekly resta visibile. Non viene cambiato
+il motore GEX, i dati originali, il NET GAMMA né il codice Pine.
+
+Nel pannello sono presenti due grafici Daily, senza expander:
 
 1. **Curva teorica GEX**: scenario prezzo ±10% con IV, OI e tempo congelati.
    La legenda sopra il grafico identifica la curva azzurra, lo spot della
@@ -92,7 +108,7 @@ senza expander intermedio:
    con cartellini sul lato destro. Per SPX sono convertiti in **prezzo ES
    equivalente** con il differenziale già verificato dal Pine.
 
-Il grafico per strike è **sempre aperto** sotto la curva. Il selettore
+Il grafico per strike è **sempre aperto** sopra la curva. Il selettore
 **±2% (default), ±5%, ±10%, Tutti** limita solo gli strike visualizzati
 rispetto allo spot **della fotografia** (non alla quotazione ES in tempo
 reale). Non modifica la catena originale, GEX, Call/Put Wall, Flip,
@@ -101,7 +117,8 @@ viene dichiarato, non spostato o inventato. L'ES Yahoo attuale rimane una
 serie separata, con provenienza e orario, e non cambia i valori GEX
 calcolati dal CSV storico.
 
-Test: `tests/test_csv_gex_chart_layout.py` e
+Test: `tests/test_csv_gex_dual_cards.py`,
+`tests/test_csv_gex_chart_layout.py` e
 `tests/test_csv_gex_es_display.py`.
 
 ## Pine Script: GEX automatico nel NET GAMMA esistente
