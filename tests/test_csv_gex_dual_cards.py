@@ -165,7 +165,7 @@ class DualGEXCardTests(unittest.TestCase):
         self.assertIn('if report.get("status") != "DIAGNOSTICO":', src)
         self.assertIn("Grafici Daily 0DTE non disponibili", src)
         self.assertIn("i due riquadri NON sono", src)
-        self.assertEqual(src.count('st.plotly_chart(\n            strike_fig'), 1)
+        self.assertEqual(src.count('st.plotly_chart(\n        strike_fig'), 1)
 
 
 if __name__ == "__main__":
