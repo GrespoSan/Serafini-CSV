@@ -71,6 +71,33 @@ class DualGEXCardTests(unittest.TestCase):
 
         self.assertIn("csv-gex-value negative", a)
         self.assertIn("color:#ff5967", a)
+        self.assertIn("csv-gex-value positive\">POSITIVE", b)
+        self.assertIn("color:#18d46d", b)
+        self.assertIn("csv-gex-value negative\">NEGATIVE", a)
+
+    def test_positive_regime_uses_cash_calendar_green_for_both_expiries(self):
+        for expiry in ("0DTE", "Weekly"):
+            with self.subTest(expiry=expiry):
+                report = valid_report("2026-11-27", regime="positive")
+                card = _gex_summary_card_html(expiry, report, "SPX", 16.0)
+                self.assertIn('csv-gex-value positive">POSITIVE', card)
+                self.assertIn('.csv-gex-value.positive{color:#18d46d;}', card)
+                self.assertNotIn('csv-gex-value negative">POSITIVE', card)
+        app = (ROOT / "app.py").read_text(encoding="utf-8")
+        self.assertIn("color:#18d46d", app)
+
+    def test_negative_stays_red_unknown_remains_neutral(self):
+        red = _gex_summary_card_html(
+            "Weekly", valid_report("2026-12-04", regime="negative"),
+            "SPX", 16.0,
+        )
+        self.assertIn('csv-gex-value negative">NEGATIVE', red)
+        unknown = _gex_summary_card_html(
+            "0DTE", valid_report("2026-11-27", regime=None),
+            "SPX", 16.0,
+        )
+        self.assertIn('csv-gex-value na">N/D', unknown)
+        self.assertNotIn('csv-gex-value positive">N/D', unknown)
 
     def test_no_basis_no_mislabeled_spx_price_as_es(self):
         data = valid_report("2026-11-27")
