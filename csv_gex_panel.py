@@ -512,6 +512,54 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%", es
     return fig
 
 
+
+@st.fragment(run_every=60)
+def _live_es_strikes(report, *, symbol, spot, es_spx_basis, window):
+    """Rinfresca soltanto lo strike chart con l'ES verificato.
+
+    Stessa cache e fonte della curva GEX; nessuna modifica ai report o
+    all'intervallo strike scelto. Non allarga silenziosamente ±2/5/10%.
+    """
+    try:
+        es_quote = _cached_es_quote() if symbol == "SPX" else None
+    except Exception:
+        es_quote = None
+    strike_fig = _strikes_chart(
+        report, symbol=symbol, spot=spot,
+        es_spx_basis=es_spx_basis, window=window,
+        es_quote=es_quote,
+    )
+    st.plotly_chart(
+        strike_fig, use_container_width=True,
+        key="csv_gex_strikes_0DTE",
+    )
+    meta = strike_fig.layout.meta or {}
+    st.caption(
+        f"**{meta.get('strike_visible', 0)} strike visualizzati** su "
+        f"{meta.get('strike_total', 0)} disponibili · finestra {window} · "
+        "unità in miliardi USD per movimento dell'1%. "
+        "La selezione agisce solo sulla visualizzazione."
+    )
+    if meta.get("es_quote_outside_window"):
+        st.caption(
+            f"**Prezzo ES {meta['es_quote_outside_window']}** disponibile "
+            f"ma fuori dalla finestra {window}; linea arancione non "
+            "disegnata. Allarga la finestra per visualizzarla."
+        )
+    if meta.get("strike_visible", 0) == 0:
+        st.info(
+            "Nessuno strike Cboe disponibile nella finestra selezionata: "
+            "allarga a ±5%, ±10% o Tutti."
+        )
+    if meta.get("offscreen_levels"):
+        st.caption(
+            "Fuori dalla finestra selezionata: "
+            + ", ".join(meta["offscreen_levels"])
+            + ". I livelli rimangono calcolati e non vengono modificati."
+        )
+
+
+
 def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> None:
     st.caption(
         "GEX Edge-style da CSV Cboe · OI da CSV o OCC · "
@@ -697,8 +745,10 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
         st.subheader("GEX by Strike · composizione Call / Put — 0DTE (Daily)")
         st.caption(
             "**PUTS − a sinistra (viola)** · **CALLS + a destra (verde)**. "
-            "La linea bianca indica lo spot utilizzato dal modello GEX "
-            + ("in equivalente ES; NON è la quotazione ES attuale."
+            "La linea chiara indica il Prezzo CSV alla fotografia "
+            + ("in equivalente ES; NON è la quotazione ES attuale. "
+               "La linea arancione tratteggiata indica il prezzo futures "
+               "Yahoo/Massive validato entro 90 minuti, se disponibile."
                if symbol == "SPX" else "del sottostante.") +
             " Wall e Gamma Flip sono contrassegnati da linee orizzontali "
             "e cartellini a destra. I grafici utilizzano lo stesso report GEX."
@@ -711,30 +761,10 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
                  "Wall, Flip, regime o codice Pine.",
         )
         window = selected_window or "±2%"
-        strike_fig = _strikes_chart(
+        _live_es_strikes(
             report, symbol=symbol, spot=info["spot"],
             es_spx_basis=es_spx_basis, window=window,
         )
-        st.plotly_chart(
-            strike_fig, use_container_width=True,
-            key="csv_gex_strikes_0DTE",
-        )
-        meta = strike_fig.layout.meta or {}
-        st.caption(
-            f"**{meta.get('strike_visible', 0)} strike visualizzati** su "
-            f"{meta.get('strike_total', 0)} disponibili · finestra {window} · "
-            "unità in miliardi USD per movimento dell'1%. "
-            "La selezione agisce solo sulla visualizzazione."
-        )
-        if meta.get("strike_visible", 0) == 0:
-            st.info("Nessuno strike Cboe disponibile nella finestra selezionata: "
-                    "allarga a ±5%, ±10% o Tutti.")
-        if meta.get("offscreen_levels"):
-            st.caption(
-                "Fuori dalla finestra selezionata: "
-                + ", ".join(meta["offscreen_levels"])
-                + ". I livelli rimangono calcolati e non vengono modificati."
-            )
 
         st.divider()
         st.subheader("Curva teorica GEX · scenario prezzo — 0DTE (Daily)")
