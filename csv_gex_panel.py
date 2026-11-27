@@ -2,6 +2,7 @@
 from __future__ import annotations
 import hashlib
 import math
+from html import escape
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -29,6 +30,129 @@ def _gex_metric(column, label, value, *, negative=False, key=""):
                 st.metric(label, value)
     else:
         column.metric(label, value)
+
+
+
+
+def _gex_summary_card_html(name: str, report: dict | None, symbol: str,
+                           es_spx_basis=None) -> str:
+    """Due schede indipendenti 0DTE/Weekly, solo presentazione.
+
+    Nessun ricalcolo: usa esclusivamente il report già validato per la
+    sua scadenza. I livelli SPX->ES sono proiettati come prima solo se
+    esiste il basis. Quando la qualità è insufficiente tutti i valori
+    sono N/D, senza ripiegare sulla scadenza opposta.
+    """
+    if name not in ("0DTE", "Weekly"):
+        raise ValueError("Scadenza GEX non riconosciuta")
+    report = report or {}
+    valid = report.get("status") == "DIAGNOSTICO"
+    basis_ok = (symbol != "SPX" or (
+        es_spx_basis is not None and math.isfinite(float(es_spx_basis))
+    ))
+    price_unit = gex_price_label(symbol)
+    title = "0DTE · DAILY" if name == "0DTE" else "WEEKLY"
+    expiry = str(report.get("expiry") or "N/D")
+    contracts = report.get("contracts")
+    usable = report.get("valid")
+    subtitle = (
+        f"Scadenza {expiry} · Contratti {contracts if contracts is not None else 'N/D'}"
+        f" · Validi GEX {usable if usable is not None else 'N/D'}"
+    )
+
+    def price_value(field):
+        if not valid or not basis_ok:
+            return "N/D", "na"
+        price = gex_display_price(report.get(field), symbol, es_spx_basis)
+        if price is None:
+            return "N/D", "na"
+        return _number(price), "negative" if price < 0 else "normal"
+
+    def gex_value(field):
+        if not valid:
+            return "N/D", "na"
+        amount = report.get(field)
+        if amount is None or not math.isfinite(float(amount)):
+            return "N/D", "na"
+        return f"{float(amount) / 1e9:+.3f}", (
+            "negative" if amount < 0 else "normal"
+        )
+
+    regime = str(report.get("regime") or "").upper() if valid else ""
+    regime_text = regime or "N/D"
+    regime_style = ("negative" if regime == "NEGATIVE" else
+                    "na" if regime_text == "N/D" else "normal")
+    price_fields = [
+        (f"Call Wall {price_unit}", price_value("call_wall")),
+        (f"Put Wall {price_unit}", price_value("put_wall")),
+        (f"Gamma Flip {price_unit}", price_value("flip")),
+        ("Regime GEX modellato", (regime_text, regime_style)),
+    ]
+    exposure_fields = [
+        ("NET GEX · mld USD / 1%", gex_value("net_gex")),
+        ("CALL GEX · mld USD / 1%", gex_value("call_gex")),
+        ("PUT GEX · mld USD / 1%", gex_value("put_gex")),
+    ]
+
+    def cells(items):
+        return "".join(
+            '<div class="csv-gex-cell"><div class="csv-gex-cell-label">'
+            + escape(label) + '</div><div class="csv-gex-value '
+            + value_type + '">' + escape(value) + '</div></div>'
+            for label, (value, value_type) in items
+        )
+
+    status = ("GEX DIAGNOSTICO · NON CERTIFICATO" if valid else
+              "GEX NON CALCOLABILE · N/D")
+    detail = ""
+    if not valid:
+        detail = str(report.get("reason") or
+                     "Scadenza priva di dati validi: nessun livello stimato.")
+    elif not basis_ok:
+        detail = "Basis ES−SPX N/D: livelli di prezzo ES non rappresentabili."
+
+    # CSS volutamente locale alle due cards, non altera i metric
+    # del NET GAMMA o gli stili globali dell'app.
+    return (
+        '<style>'
+        '.csv-gex-card{background:#090b0f;color:#e8ebf0;border:1px solid #32363e;'
+        'border-radius:13px;padding:16px 18px 15px;min-height:242px;}'
+        '.csv-gex-card-head{display:flex;flex-wrap:wrap;gap:8px 12px;'
+        'align-items:center;justify-content:space-between;margin-bottom:5px;}'
+        '.csv-gex-card-name{font-size:1.04rem;font-weight:800;color:#e8ebf0;}'
+        '.csv-gex-card-status{font-size:.73rem;color:#9ca3af;letter-spacing:.02em;}'
+        '.csv-gex-card-subtitle{font-size:.79rem;color:#aeb6c3;margin-bottom:14px;}'
+        '.csv-gex-card-grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));'
+        'gap:8px 10px;}'
+        '.csv-gex-card-grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));'
+        'gap:8px 10px;border-top:1px solid #2a2d34;padding-top:12px;margin-top:13px;}'
+        '.csv-gex-cell{min-width:0;}'
+        '.csv-gex-cell-label{font-size:.72rem;color:#aeb6c3;line-height:1.4;'
+        'min-height:29px;margin-bottom:5px;}'
+        '.csv-gex-value{font-size:clamp(1.01rem,1.5vw,1.44rem);'
+        'font-weight:600;white-space:nowrap;overflow-wrap:anywhere;}'
+        '.csv-gex-value.negative{color:#ff5967;}'
+        '.csv-gex-value.na{color:#929baa;}'
+        '.csv-gex-card-reason{font-size:.78rem;color:#c4a977;'
+        'line-height:1.5;margin-top:12px;}'
+        '@media(max-width:1400px){.csv-gex-card-grid4{grid-template-columns:'
+        'repeat(2,minmax(0,1fr));}.csv-gex-card-grid3{grid-template-columns:'
+        'repeat(2,minmax(0,1fr));}.csv-gex-card{min-height:0;}'
+        '.csv-gex-value{font-size:1.22rem;}}'
+        '@media(max-width:650px){.csv-gex-card-grid3{grid-template-columns:'
+        'repeat(2,minmax(0,1fr));}}'
+        '</style>'
+        '<section class="csv-gex-card" aria-label="' + escape(title) + '">'
+        '<div class="csv-gex-card-head"><span class="csv-gex-card-name">'
+        + escape(title) + '</span><span class="csv-gex-card-status">'
+        + escape(status) + '</span></div>'
+        '<div class="csv-gex-card-subtitle">' + escape(subtitle) + '</div>'
+        '<div class="csv-gex-card-grid4">' + cells(price_fields) + '</div>'
+        '<div class="csv-gex-card-grid3">' + cells(exposure_fields) + '</div>'
+        + ('<div class="csv-gex-card-reason">' + escape(detail) + '</div>'
+           if detail else '')
+        + '</section>'
+    )
 
 
 @st.fragment(run_every=60)
