@@ -378,6 +378,35 @@ class GEXChartLayoutTests(unittest.TestCase):
                             for x in all_figure.layout.annotations))
         self.assertEqual(report["call_wall"], 7550)
 
+    def test_gamma_flip_gold_not_confused_with_put_wall_on_both_charts(self):
+        report, spot = example_report()
+        original = copy.deepcopy(report)
+        strike = _strikes_chart(
+            report, symbol="SPX", spot=spot, es_spx_basis=17,
+            window="±2%",
+        )
+        curve = _curve_chart(
+            report, spot, symbol="SPX", es_spx_basis=17,
+        )
+        for fig, flip_name, put_name in (
+            (strike, "Gamma Flip / ES", "Put Wall / ES"),
+            (curve, "Gamma Flip · ES", "Put Wall · ES"),
+        ):
+            with self.subTest(chart=flip_name):
+                gamma = next(t for t in fig.data if t.name == flip_name)
+                put = next(t for t in fig.data if t.name == put_name)
+                self.assertEqual(gamma.line.color, "#facc15")
+                self.assertEqual(gamma.line.dash, "dot")
+                self.assertNotEqual(gamma.line.color, put.line.color)
+                self.assertEqual(put.line.dash, "solid")
+        flip_labels = [a for a in strike.layout.annotations
+                       if "GAMMA FLIP" in a.text]
+        self.assertEqual(len(flip_labels), 1)
+        self.assertEqual(flip_labels[0].bordercolor, "#facc15")
+        self.assertEqual(flip_labels[0].bgcolor, "#332806")
+        self.assertEqual(flip_labels[0].font.color, "#fff0a3")
+        self.assertEqual(original, report)
+
     def test_curve_has_legend_and_no_colliding_top_bottom_annotations(self):
         report, spot = example_report()
         quote = {"price": 7250.25, "symbol": "ESZ26.CME"}
