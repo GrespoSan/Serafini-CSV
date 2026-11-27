@@ -60,6 +60,7 @@ class DualGEXCardTests(unittest.TestCase):
 
         for card in (a, b):
             self.assertIn("background:#090b0f", card)
+            self.assertIn(".csv-gex-card-name{font-size:1.04rem;font-weight:800;color:#55d5f6;}", card)
             self.assertIn("csv-gex-card-grid4", card)
             self.assertIn("csv-gex-card-grid3", card)
             self.assertEqual(card.count('<div class="csv-gex-cell">'), 7)
