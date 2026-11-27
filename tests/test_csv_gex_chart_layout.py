@@ -38,6 +38,22 @@ def example_report():
 
 
 class GEXChartLayoutTests(unittest.TestCase):
+    def test_strike_help_is_collapsed_and_chart_remains_visible(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "csv_gex_panel.py").read_text(encoding="utf-8")
+        title = 'st.subheader("GEX by Strike · composizione Call / Put — 0DTE (Daily)")'
+        summary = 'st.caption("**PUTS ←** viola · **CALLS →** verde. "'
+        help_panel = 'with st.expander("Come leggere il grafico", expanded=False):'
+        controls = 'selected_window = st.segmented_control('
+        figure = '_live_es_strikes('
+        self.assertIn(summary, source)
+        self.assertIn(help_panel, source)
+        self.assertLess(source.index(title), source.index(summary))
+        self.assertLess(source.index(summary), source.index(help_panel))
+        self.assertLess(source.index(help_panel), source.index(controls))
+        self.assertLess(source.index(controls), source.rindex(figure))
+        self.assertEqual(source.count('with st.expander("Come leggere il grafico"'), 1)
+
     def test_visible_primary_chart_with_default_2_percent_and_4_choices(self):
         panel = (Path(__file__).resolve().parents[1] /
                  "csv_gex_panel.py").read_text(encoding="utf-8")
