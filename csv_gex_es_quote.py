@@ -80,24 +80,29 @@ def fetch_es_quote(*, now=None, request=None):
     on=now.astimezone(NY).date()
     primary=front_symbol(on)
     failures=[]
-    for symbol in (primary,"ES=F"):
-        url=(f"https://query1.finance.yahoo.com/v8/finance/chart/"
-             f"{quote(symbol,safe='')}?range=1d&interval=1m")
-        try:
-            if request:
-                body=request(url)
-            else:
-                r=Request(url,headers={"User-Agent":"Mozilla/5.0",
-                                       "Accept":"application/json"})
-                with urlopen(r,timeout=14) as response:
-                    body=response.read(2_000_001)
-            if not isinstance(body,bytes) or len(body)>2_000_000:
-                raise ValueError("Dati Yahoo non validi o troppo grandi")
-            result=parse_chart(body,symbol,now)
-            result["preferred_contract"]=primary
-            return result
-        except Exception as exc:
-            failures.append(f"{symbol}: {type(exc).__name__}")
+    # Yahoo può servire un simbolo a query2 quando query1 respinge
+    # Streamlit Cloud (rate limit/HTTPError) o restituisce una serie vuota.
+    # Entrambi i provider sono Yahoo: NO fonte diversa, NO dati sintetici.
+    # Il controllo 90 minuti rimane INTERAMENTE in parse_chart().
+    for host in ("query1.finance.yahoo.com", "query2.finance.yahoo.com"):
+        for symbol in (primary, "ES=F"):
+            url=(f"https://{host}/v8/finance/chart/"
+                 f"{quote(symbol,safe='')}?range=2d&interval=1m")
+            try:
+                if request:
+                    body=request(url)
+                else:
+                    req=Request(url,headers={"User-Agent":"Mozilla/5.0",
+                                             "Accept":"application/json"})
+                    with urlopen(req,timeout=7) as response:
+                        body=response.read(2_000_001)
+                if not isinstance(body,bytes) or len(body)>2_000_000:
+                    raise ValueError("Dati Yahoo non validi o troppo grandi")
+                result=parse_chart(body,symbol,now)
+                result["preferred_contract"]=primary
+                return result
+            except Exception as exc:
+                failures.append(f"{symbol}@{host}: {type(exc).__name__}")
     return {"price":None,"source":"YAHOO_FINANCE_CHART","symbol":primary,
             "observed_utc":None,"age_minutes":None,
             "error":"Nessuna quotazione ES utilizzabile ("+"; ".join(failures)+")"}
