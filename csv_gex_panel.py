@@ -120,7 +120,7 @@ def _gex_summary_card_html(name: str, report: dict | None, symbol: str,
         'border-radius:13px;padding:16px 18px 15px;min-height:242px;}'
         '.csv-gex-card-head{display:flex;flex-wrap:wrap;gap:8px 12px;'
         'align-items:center;justify-content:space-between;margin-bottom:5px;}'
-        '.csv-gex-card-name{font-size:1.04rem;font-weight:800;color:#e8ebf0;}'
+        '.csv-gex-card-name{font-size:1.04rem;font-weight:800;color:#55d5f6;}'
         '.csv-gex-card-status{font-size:.73rem;color:#9ca3af;letter-spacing:.02em;}'
         '.csv-gex-card-subtitle{font-size:.79rem;color:#aeb6c3;margin-bottom:14px;}'
         '.csv-gex-card-grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));'
