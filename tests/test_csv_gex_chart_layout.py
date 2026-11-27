@@ -43,19 +43,25 @@ class GEXChartLayoutTests(unittest.TestCase):
                  "csv_gex_panel.py").read_text(encoding="utf-8")
         self.assertEqual(GEX_STRIKE_WINDOWS, ("±2%", "±5%", "±10%", "Tutti"))
         self.assertNotIn('with st.expander("GEX per strike', panel)
-        self.assertIn('st.subheader("GEX by Strike · composizione Call / Put")', panel)
+        self.assertIn('st.subheader("GEX by Strike · composizione Call / Put — 0DTE (Daily)")', panel)
         self.assertIn('st.segmented_control(', panel)
         self.assertIn('default="±2%"', panel)
         self.assertIn('spot=info["spot"]', panel)
-        self.assertIn('st.subheader("Curva teorica GEX · scenario prezzo")', panel)
+        self.assertIn('st.subheader("Curva teorica GEX · scenario prezzo — 0DTE (Daily)")', panel)
         self.assertLess(
-            panel.index('st.subheader("GEX by Strike · composizione Call / Put")'),
-            panel.index('st.subheader("Curva teorica GEX · scenario prezzo")'),
+            panel.index('st.subheader("GEX by Strike · composizione Call / Put — 0DTE (Daily)")'),
+            panel.index('st.subheader("Curva teorica GEX · scenario prezzo — 0DTE (Daily)")'),
         )
         self.assertLess(
             panel.index('st.plotly_chart(\n            strike_fig'),
             panel.index('_live_es_curve(\n            report,info["spot"]'),
         )
+        self.assertNotIn('st.radio("Scadenza GEX"', panel)
+        self.assertIn('st.html(_gex_summary_card_html(', panel)
+        self.assertIn('"Weekly", reports.get("Weekly")', panel)
+        self.assertIn('"0DTE", reports.get("0DTE")', panel)
+        self.assertIn('key="csv_gex_strikes_0DTE"', panel)
+        self.assertIn('es_spx_basis=es_spx_basis,selected="0DTE"', panel)
 
     def test_2_5_10_and_all_only_filter_display_not_report(self):
         report, spot = example_report()
