@@ -266,7 +266,7 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
     for field, label, color, dash in (
         ("call_wall", "Call Wall", "#8fe10a", "solid"),
         ("put_wall", "Put Wall", "#9b4de1", "solid"),
-        ("flip", "Gamma Flip", "#c084fc", "dot"),
+        ("flip", "Gamma Flip", "#facc15", "dot"),
     ):
         vertical(gex_display_price(report[field], symbol, es_spx_basis),
                  f"{label} · {display_symbol}", color, dash)
@@ -454,7 +454,7 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%", es
     markers = [
         ("Call Wall", report["call_wall"], "#8fe10a", "solid", "#8fe10a", "#13210c"),
         ("Put Wall", report["put_wall"], "#9634db", "solid", "#9634db", "#ffffff"),
-        ("Gamma Flip", report["flip"], "#c084fc", "dot", "#251237", "#e9c7ff"),
+        ("Gamma Flip", report["flip"], "#facc15", "dot", "#332806", "#fff0a3"),
         ("Prezzo CSV", spot, "#e2e8f0", "dash", "#e2e8f0", "#111827"),
     ]
     offscreen = []
