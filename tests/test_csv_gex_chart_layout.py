@@ -53,7 +53,7 @@ class GEXChartLayoutTests(unittest.TestCase):
             panel.index('st.subheader("Curva teorica GEX · scenario prezzo — 0DTE (Daily)")'),
         )
         self.assertLess(
-            panel.index('st.plotly_chart(\n            strike_fig'),
+            panel.index('st.plotly_chart(\n        strike_fig'),
             panel.index('_live_es_curve(\n            report,info["spot"]'),
         )
         self.assertNotIn('st.radio("Scadenza GEX"', panel)
@@ -99,7 +99,7 @@ class GEXChartLayoutTests(unittest.TestCase):
             ("CALL WALL / ES", "7,317.00"),
             ("PUT WALL / ES", "7,117.00"),
             ("GAMMA FLIP / ES", "7,257.25"),
-            ("SPOT CSV · ORA FOTOGRAFIA / ES", "7,217.00"),
+            ("PREZZO CSV", "7,217.00"),
         ):
             self.assertTrue(any(name in text and value in text
                                 for text in labels), (name, value, labels))
@@ -110,6 +110,129 @@ class GEXChartLayoutTests(unittest.TestCase):
         self.assertEqual(fig.layout.height, 760)
         xlo, xhi = fig.layout.xaxis.range
         self.assertAlmostEqual(xlo, -xhi)
+
+    def test_strikes_legend_and_card_use_exact_prezzo_csv(self):
+        report, spot = example_report()
+        figure = _strikes_chart(
+            report, symbol="SPX", spot=spot,
+            es_spx_basis=17.0, window="±2%",
+        )
+        names = [trace.name for trace in figure.data]
+        labels = [a.text for a in figure.layout.annotations]
+        self.assertIn("Prezzo CSV", names)
+        self.assertNotIn("Spot CSV · ora fotografia / ES", names)
+        self.assertTrue(any("PREZZO CSV" in t and "7,217.00" in t
+                            for t in labels))
+        self.assertFalse(any("SPOT CSV" in t for t in labels))
+        csv_line = next(t for t in figure.data if t.name == "Prezzo CSV")
+        self.assertEqual(csv_line.line.dash, "dash")
+        self.assertEqual(list(csv_line.y), [7217.0, 7217.0])
+
+    def test_strikes_yahoo_or_massive_orange_quote_with_exact_price(self):
+        report, spot = example_report()
+        frozen = copy.deepcopy(report)
+        for source, provider in (
+            ("YAHOO_FINANCE_CHART", "Yahoo"),
+            ("MASSIVE_FUTURES_5MIN", "Massive 5m"),
+        ):
+            with self.subTest(source=source):
+                quote = {
+                    "price": 7250.25, "source": source,
+                    "symbol": "ESZ26.CME",
+                    "observed_rome": "27/11/2026 09:35:00",
+                    "age_minutes": 10.0,
+                }
+                fig = _strikes_chart(
+                    report, symbol="SPX", spot=spot,
+                    es_spx_basis=17.0, window="±2%",
+                    es_quote=quote,
+                )
+                trace = next(t for t in fig.data
+                             if t.name == f"Prezzo {provider} · 7,250.25")
+                self.assertEqual(trace.mode, "lines")
+                self.assertEqual(trace.line.color, "#fb923c")
+                self.assertEqual(trace.line.dash, "dash")
+                self.assertEqual(list(trace.y), [7250.25, 7250.25])
+                self.assertEqual(len(fig.layout.annotations), 5)
+                self.assertTrue(any(
+                    f"PREZZO {provider.upper()}" in a.text and
+                    "7,250.25" in a.text for a in fig.layout.annotations
+                ))
+                self.assertTrue(fig.layout.meta["es_quote_shown"])
+                self.assertIsNone(fig.layout.meta["es_quote_outside_window"])
+                self.assertEqual(fig.layout.meta["strike_visible"], 29)
+        self.assertEqual(frozen, report)
+
+    def test_strikes_stale_or_missing_quote_never_plots_price(self):
+        report, spot = example_report()
+        cases = [
+            None,
+            {"price": None},
+            {"price": 7250.25, "source": "UNKNOWN", "symbol": "ESZ26.CME",
+             "observed_rome": "27/11/2026 09:35:00",
+             "age_minutes": 10},
+            {"price": 7250.25, "source": "YAHOO_FINANCE_CHART",
+             "symbol": "ESZ26.CME",
+             "observed_rome": "27/11/2026 09:35:00",
+             "age_minutes": 91},
+            {"price": 7250.25, "source": "YAHOO_FINANCE_CHART",
+             "symbol": "ESZ26.CME",
+             "observed_rome": None, "age_minutes": 4},
+        ]
+        for quote in cases:
+            with self.subTest(quote=quote):
+                fig = _strikes_chart(
+                    report, symbol="SPX", spot=spot,
+                    es_spx_basis=17.0, window="±2%",
+                    es_quote=quote,
+                )
+                self.assertFalse(any(trace.name.startswith("Prezzo Yahoo")
+                                     or trace.name.startswith("Prezzo Massive")
+                                     for trace in fig.data))
+                self.assertEqual(len(fig.layout.annotations), 4)
+                self.assertFalse(fig.layout.meta["es_quote_shown"])
+        # Nei mercati diversi da SPX non viene mai disegnata una quota ES.
+        fig = _strikes_chart(
+            report, symbol="NDX", spot=spot, window="±2%",
+            es_quote={"price": 7250.25, "source": "YAHOO_FINANCE_CHART",
+                      "symbol": "ESZ26.CME", "observed_rome": "27/11/2026",
+                      "age_minutes": 4},
+        )
+        self.assertFalse(fig.layout.meta["es_quote_shown"])
+
+    def test_price_outside_strike_window_is_reported_not_faked(self):
+        report, spot = example_report()
+        quote = {
+            "price": 7440.0, "source": "YAHOO_FINANCE_CHART",
+            "symbol": "ESZ26.CME",
+            "observed_rome": "27/11/2026 09:35:00",
+            "age_minutes": 10.0,
+        }
+        tight = _strikes_chart(
+            report, symbol="SPX", spot=spot,
+            es_spx_basis=17.0, window="±2%", es_quote=quote,
+        )
+        self.assertFalse(tight.layout.meta["es_quote_shown"])
+        self.assertEqual(tight.layout.meta["es_quote_outside_window"],
+                         "Yahoo: 7,440.00")
+        self.assertFalse(any(t.name.startswith("Prezzo Yahoo")
+                             for t in tight.data))
+        wide = _strikes_chart(
+            report, symbol="SPX", spot=spot,
+            es_spx_basis=17.0, window="±5%", es_quote=quote,
+        )
+        self.assertTrue(wide.layout.meta["es_quote_shown"])
+        self.assertTrue(any(t.name == "Prezzo Yahoo · 7,440.00"
+                            for t in wide.data))
+
+    def test_strikes_refreshes_quote_and_discloses_out_of_range(self):
+        panel = (Path(__file__).resolve().parents[1] /
+                 "csv_gex_panel.py").read_text(encoding="utf-8")
+        self.assertIn("@st.fragment(run_every=60)\ndef _live_es_strikes", panel)
+        self.assertIn("es_quote = _cached_es_quote() if symbol == \"SPX\"", panel)
+        self.assertIn("_live_es_strikes(\n            report, symbol=symbol", panel)
+        self.assertIn('meta.get("es_quote_outside_window")', panel)
+        self.assertIn("0 <= quote_age <= 90", panel)
 
     def test_outside_window_levels_not_misplotted(self):
         report, spot = example_report()
