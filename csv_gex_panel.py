@@ -347,6 +347,67 @@ def _strike_window(rows, *, spot, symbol, es_spx_basis=None, window="±2%"):
     return [(row, value) for row, value in priced if lo <= value <= hi], lo, hi, center
 
 
+def _add_priority_strike_annotations(fig, labels, *, low, high):
+    """Cartellini leggibili: Walls prioritari, poi Flip e prezzi.
+
+    Il prezzo di ancoraggio (y) rimane SEMPRE quello calcolato. Quando
+    due etichette sono vicine, viene spostata di pochi pixel solo la
+    presentazione della meno importante, non la linea o il livello.
+    Le Walls vengono disegnate per ultime, quindi restano in primo piano.
+    """
+    priority = {
+        "Call Wall": 0, "Put Wall": 1, "Gamma Flip": 2,
+        "Prezzo CSV": 3, "Prezzo ES": 4,
+    }
+    plot_height = 760 - 88 - 54  # altezza Plotly al netto dei margini
+    separation = 27  # pixel: evita cartellini alti circa 20-23px
+    used_pixels = []
+    positioned = []
+    for label in sorted(labels, key=lambda item: priority[item["kind"]]):
+        original = (label["price"] - low) / (high - low) * plot_height
+        # Mantiene fermo il primo Wall; gli altri possono spostarsi solo
+        # quanto necessario, anche in caso di Wall/Wall coincidenti.
+        candidates = (0, -30, 30, -60, 60, -90, 90, -120, 120,
+                      -150, 150, -180, 180)
+        valid = [
+            shift for shift in candidates
+            if 13 <= original + shift <= plot_height - 13
+            and all(abs((original + shift) - other) >= separation
+                    for other in used_pixels)
+        ]
+        if valid:
+            shift = valid[0]
+        else:
+            # Fallback: massimizza la distanza dai cartellini prioritari;
+            # le Walls rimangono comunque disegnate sopra gli altri.
+            admissible = [
+                shift for shift in candidates
+                if 13 <= original + shift <= plot_height - 13
+            ] or [0]
+            shift = max(
+                admissible,
+                key=lambda val: (
+                    min((abs(original + val - other)
+                         for other in used_pixels), default=999),
+                    -abs(val),
+                ),
+            )
+        used_pixels.append(original + shift)
+        positioned.append((label, shift))
+
+    # L'ordine delle annotazioni Plotly determina lo z-order: Wall
+    # sopra Flip, CSV e Yahoo/Massive. I livelli orizzontali non cambiano.
+    for label, shift in reversed(positioned):
+        fig.add_annotation(
+            x=1.014, y=label["price"], xref="paper", yref="y",
+            xanchor="left", yanchor="middle", yshift=shift,
+            text=label["text"], showarrow=False, align="left",
+            bgcolor=label["background"], bordercolor=label["color"],
+            borderwidth=1, borderpad=5,
+            font=dict(family="Arial", size=11, color=label["foreground"]),
+        )
+
+
 def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%", es_quote=None):
     """GEX per strike specchiato, finestra selezionabile, livelli a destra.
 
@@ -396,6 +457,7 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%", es
         ("Prezzo CSV", spot, "#e2e8f0", "dash", "#e2e8f0", "#111827"),
     ]
     offscreen = []
+    pending_labels = []
     for label, raw, color, dash, background, foreground in markers:
         price = gex_display_price(raw, symbol, es_spx_basis)
         if price is None:
@@ -413,15 +475,12 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%", es
             line=dict(color=color, width=1.35, dash=dash),
             hovertemplate=f"{legend_label} %{{y:,.2f}}<extra></extra>",
         ))
-        fig.add_annotation(
-            x=1.014, y=price, xref="paper", yref="y",
-            xanchor="left", yanchor="middle",
-            text=f"<b>{box_label} &nbsp; {price:,.2f}</b>",
-            showarrow=False, align="left",
-            bgcolor=background, bordercolor=color,
-            borderwidth=1, borderpad=5,
-            font=dict(family="Arial", size=11, color=foreground),
-        )
+        pending_labels.append({
+            "kind": label, "price": price,
+            "text": f"<b>{box_label} &nbsp; {price:,.2f}</b>",
+            "background": background, "color": color,
+            "foreground": foreground,
+        })
 
     # Riferimento ES indipendente dal CSV, ottenuto dallo stesso cache
     # Yahoo/Massive della curva. Non ricampiona strike né calcola GEX.
@@ -452,29 +511,19 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%", es
                             f"<br>Età: {quote_age:.1f} minuti<extra></extra>"
                         ),
                     ))
-                    # I cartellini devono essere leggibili anche quando
-                    # spot CSV e prezzo esterno sono ravvicinati.
-                    nearby = [
-                        gex_display_price(raw, symbol, es_spx_basis)
-                        for _, raw, *_ in markers
-                    ]
-                    yshift = (14 if any(p is not None and
-                                abs(p - quote_price) <= max(min_step, 8.0)
-                                for p in nearby) else 0)
-                    fig.add_annotation(
-                        x=1.014, y=quote_price, xref="paper", yref="y",
-                        xanchor="left", yanchor="middle", yshift=yshift,
-                        text=f"<b>PREZZO {provider.upper()} &nbsp; "
-                             f"{quote_price:,.2f}</b>",
-                        showarrow=False, align="left",
-                        bgcolor="#332012", bordercolor="#fb923c",
-                        borderwidth=1, borderpad=5,
-                        font=dict(family="Arial", size=11, color="#fdba74"),
-                    )
+                    pending_labels.append({
+                        "kind": "Prezzo ES", "price": quote_price,
+                        "text": (f"<b>PREZZO {provider.upper()} &nbsp; "
+                                 f"{quote_price:,.2f}</b>"),
+                        "background": "#332012", "color": "#fb923c",
+                        "foreground": "#fdba74",
+                    })
                 else:
                     external_outside = f"{provider}: {quote_price:,.2f}"
         except (TypeError, ValueError, KeyError, OverflowError):
             pass
+
+    _add_priority_strike_annotations(fig, pending_labels, low=low, high=high)
 
     # Asse leggibile anche su schermi 1080p; invece di scrivere ogni strike
     # si mantiene la risoluzione originaria ma si diradano le tacche.
