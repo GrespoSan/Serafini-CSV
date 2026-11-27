@@ -39,7 +39,7 @@ class GEXOnlyESTests(unittest.TestCase):
         self.assertIn("'es_spx_basis': offset", g)
         self.assertIn("asia_panel.get('es_spx_basis')", app)
         self.assertIn("es_spx_basis=es_spx_basis", panel)
-        self.assertIn("gex_display_price(report[field], symbol, es_spx_basis)", panel)
+        self.assertIn("gex_display_price(report.get(field), symbol, es_spx_basis)", panel)
         self.assertIn('gex_display_price(row["spot"], symbol, es_spx_basis)', panel)
         self.assertIn('gex_display_price(r["strike"], symbol, es_spx_basis)', panel)
         self.assertIn("if basis_available:\n        st.subheader(\"GEX by Strike", panel)
