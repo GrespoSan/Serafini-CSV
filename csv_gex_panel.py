@@ -535,9 +535,10 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
             ". I valori GEX e il Pine sono calcolati soltanto con l'OI CSV."
         )
     st.caption(info["iv_note"])
-    selected = st.radio("Scadenza GEX", ["0DTE", "Weekly"], horizontal=True,
-                        key="csv_gex_selected_expiry")
-    report = info["reports"][selected]
+    # Le due scadenze sono sempre visibili contemporaneamente.
+    # Solo i grafici 0DTE (Daily) vengono renderizzati più sotto.
+    reports = info["reports"]
+    report = reports.get("0DTE") or {}
     spot_info = info.get("spot_info") or {}
     if spot_info.get("method") == "SPXW_0DTE_PUT_CALL_PARITY_R0_Q0":
         st.caption(f"**SPX implicito dalle opzioni: {info['spot']:,.2f}** · "
@@ -562,70 +563,49 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
                 "Il GEX è comunque calcolato sul CSV; nessun prezzo SPX "
                 "viene presentato come livello ES."
             )
-    st.caption(f"**{selected}** · Scadenza: {report['expiry']} · "
-               f"Contratti nel CSV: {report['contracts']} · "
-               f"Validi GEX (OI > 0 + IV utilizzabile): {report['valid']}")
-    if report["status"] != "DIAGNOSTICO":
-        st.warning("Qualità insufficiente — livelli, regime e curva GEX N/D. "
-                   + report["reason"])
-        metrics = st.columns(4)
-        for column, name in zip(
-            metrics,
-            (f"Call Wall {price_symbol}", f"Put Wall {price_symbol}",
-             f"Gamma Flip {price_symbol}", "Regime"),
-        ):
-            column.metric(name, "N/D")
-        st.metric("NET GEX (mld USD / 1%)", "N/D")
-        return
-    st.warning(
-        "**GEX DIAGNOSTICO, NON CERTIFICATO.** " + report["reason"] +
-        " I livelli non rappresentano posizioni dealer osservate e non sono "
-        "segnali operativi."
-    )
-    # Lo stile si applica SOLO ai valori negativi del modulo GEX,
-    # non alle etichette, ai livelli NET GAMMA o ai grafici.
-    st.html("""
-    <style>
-    [class*="st-key-csv_gex_negative_"] [data-testid="stMetricValue"],
-    [class*="st-key-csv_gex_negative_"] [data-testid="stMetricValue"] * {
-        color: #ff5b65 !important;
-    }
-    </style>
-    """)
-    metrics = st.columns(4)
-    for column, field, label, suffix in (
-        (metrics[0], "call_wall", f"Call Wall {price_symbol}", "call_wall"),
-        (metrics[1], "put_wall", f"Put Wall {price_symbol}", "put_wall"),
-        (metrics[2], "flip", f"Gamma Flip {price_symbol}", "flip"),
-    ):
-        value = (gex_display_price(report[field], symbol, es_spx_basis)
-                 if basis_available else None)
-        _gex_metric(
-            column, label, _number(value),
-            negative=value is not None and value < 0, key=suffix,
-        )
-    _gex_metric(
-        metrics[3], "Regime GEX modellato", report["regime"].upper(),
-        negative=report["regime"].lower() == "negative", key="regime",
-    )
-    a, b, c = st.columns(3)
-    for column, field, label, suffix in (
-        (a, "net_gex", "NET GEX · mld USD / 1%", "net"),
-        (b, "call_gex", "CALL GEX · mld USD / 1%", "call"),
-        (c, "put_gex", "PUT GEX · mld USD / 1%", "put"),
-    ):
-        value = report[field]
-        _gex_metric(
-            column, label, f"{value/1e9:+.3f}",
-            negative=value < 0, key=suffix,
-        )
+    # Due riquadri DARK, ciascuno legge esclusivamente la propria
+    # scadenza GEX già calcolata; nessuna Weekly usata al posto della 0DTE.
     st.caption(
-        "Scenario prezzo: 201 punti, ±10% dallo spot; IV, OI e tempo "
-        "alla scadenza T congelati. Gamma BSM r=q=0; "
+        "**GEX modellato · diagnostico, non certificato.** "
+        "Le due schede utilizzano lo stesso CSV e la medesima fonte OI "
+        "riportata sopra, ma ciascuna scadenza è valutata separatamente. "
+        "I livelli non rappresentano posizioni dealer osservate."
+    )
+    left, right = st.columns(2, gap="medium")
+    with left:
+        st.html(_gex_summary_card_html(
+            "0DTE", reports.get("0DTE"), symbol, es_spx_basis,
+        ))
+    with right:
+        st.html(_gex_summary_card_html(
+            "Weekly", reports.get("Weekly"), symbol, es_spx_basis,
+        ))
+    same_expiry = (reports.get("0DTE") and reports.get("Weekly") and
+                   reports["0DTE"].get("expiry") ==
+                   reports["Weekly"].get("expiry"))
+    if same_expiry:
+        st.caption(
+            "**Attenzione:** Daily e Weekly indicano la stessa scadenza "
+            f"({reports['0DTE']['expiry']}); i due riquadri NON sono "
+            "esposizioni indipendenti. I livelli sono ripetuti per "
+            "trasparenza, non sommati."
+        )
+    if report.get("status") != "DIAGNOSTICO":
+        st.info(
+            "**Grafici Daily 0DTE non disponibili** — "
+            + str(report.get("reason") or
+                  "assenza di dati validi per la scadenza 0DTE.")
+            + " La scheda Weekly rimane visualizzata senza grafici "
+            "e non sostituisce quelli della Daily."
+        )
+        return
+    st.caption(
+        "Scenario **solo 0DTE · Daily**: 201 punti, ±10% dallo spot; "
+        "IV, OI e tempo alla scadenza T congelati. Gamma BSM r=q=0; "
         "Gamma Flip solo se la curva attraversa realmente lo zero."
     )
     if basis_available:
-        st.subheader("GEX by Strike · composizione Call / Put")
+        st.subheader("GEX by Strike · composizione Call / Put — 0DTE (Daily)")
         st.caption(
             "**PUTS − a sinistra (viola)** · **CALLS + a destra (verde)**. "
             "La linea bianca indica lo spot utilizzato dal modello GEX "
@@ -648,7 +628,7 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
         )
         st.plotly_chart(
             strike_fig, use_container_width=True,
-            key=f"csv_gex_strikes_{selected}",
+            key="csv_gex_strikes_0DTE",
         )
         meta = strike_fig.layout.meta or {}
         st.caption(
@@ -668,7 +648,7 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
             )
 
         st.divider()
-        st.subheader("Curva teorica GEX · scenario prezzo")
+        st.subheader("Curva teorica GEX · scenario prezzo — 0DTE (Daily)")
         st.caption(
             "Legenda superiore: curva NET GEX azzurra, Spot CSV come pallino "
             "grigio chiaro, ES Yahoo come pallino arancione (se disponibile). "
@@ -677,5 +657,5 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
         )
         _live_es_curve(
             report,info["spot"],symbol=symbol,
-            es_spx_basis=es_spx_basis,selected=selected,
+            es_spx_basis=es_spx_basis,selected="0DTE",
         )
