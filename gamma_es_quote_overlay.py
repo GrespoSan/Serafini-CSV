@@ -25,7 +25,7 @@ def add_es_quote_to_net_gamma(fig, strike_prices, quote, *, has_es_axis: bool):
         prices = [float(p) for p in strike_prices]
     except (ValueError, TypeError, OverflowError, KeyError):
         return {"shown": False, "reason": "Quotazione ES non verificabile"}
-    if (quote.get("source") != "YAHOO_FINANCE_CHART"
+    if (quote.get("source") not in ("YAHOO_FINANCE_CHART", "MASSIVE_FUTURES_5MIN")
             or not quote.get("observed_rome")
             or not quote.get("symbol")
             or not prices or not all(math.isfinite(v) and v > 0 for v in prices)
@@ -38,7 +38,7 @@ def add_es_quote_to_net_gamma(fig, strike_prices, quote, *, has_es_axis: bool):
     )
     fig.add_annotation(
         x=0.995, xref="paper", y=price, yref="y",
-        text=f"ES Yahoo {price:,.2f}", showarrow=False,
+        text=f"ES {'Yahoo' if quote['source'] == 'YAHOO_FINANCE_CHART' else 'Massive 5m'} {price:,.2f}", showarrow=False,
         xanchor="right", yanchor="bottom",
         font=dict(color="#fb923c", size=12),
         bgcolor="rgba(16,17,22,0.91)", bordercolor="#fb923c",
@@ -60,4 +60,5 @@ def add_es_quote_to_net_gamma(fig, strike_prices, quote, *, has_es_axis: bool):
         "observed_rome": str(quote["observed_rome"]),
         "age_minutes": age,
         "contract_kind": quote.get("contract_kind"),
+        "source": quote.get("source"),
     }
