@@ -57,6 +57,7 @@ class NetGammaCompactUITests(unittest.TestCase):
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, s)
+        self.assertRegex(s, r"value=False,\s*key='gamma_independent_scale_v1'")
         self.assertIn("if not covered:", s)
         self.assertIn("if omitted:", s)
         self.assertIn("with st.expander('Visualizza e copia codice Pine'", s)
@@ -72,7 +73,6 @@ class NetGammaCompactUITests(unittest.TestCase):
             "show_percent_lines = st.checkbox(",
             "show_visual_extension = st.checkbox(",
             "value=True, key='gamma_visual_extension_v1'",
-            "value=False, key='gamma_independent_scale_v1'",
             "value=False, key=\"gamma_percent_lines_v1\"",
             "add_es_quote_to_net_gamma(",
             "make_pine_weekly_only(",
