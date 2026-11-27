@@ -99,7 +99,7 @@ class GEXChartLayoutTests(unittest.TestCase):
             ("CALL WALL / ES", "7,317.00"),
             ("PUT WALL / ES", "7,117.00"),
             ("GAMMA FLIP / ES", "7,257.25"),
-            ("SPOT MODELLO GEX / ES", "7,217.00"),
+            ("SPOT CSV · ORA FOTOGRAFIA / ES", "7,217.00"),
         ):
             self.assertTrue(any(name in text and value in text
                                 for text in labels), (name, value, labels))
