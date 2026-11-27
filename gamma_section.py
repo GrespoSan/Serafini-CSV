@@ -235,6 +235,9 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
         result.pop('bars', None)
         return result
 
+    # I dettagli esplicativi restano consultabili in un unico pannello
+    # chiuso; NON cambiano condizioni, sorgenti, controlli o calcoli.
+    technical_notes = []
     st.markdown('**Differenziale ES − SPX (sessione precedente)**')
     basis_key = f'basis_override_{day.isoformat()}'
     attempt_key = f'basis_auto_attempted_{day.isoformat()}'
@@ -309,10 +312,13 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                    '. Puoi inserire manualmente il differenziale.')
     auto_result = st.session_state.auto_basis_results.get(day.isoformat())
     if auto_result:
-        st.caption(f"Proposta automatica **{auto_result['basis']:.2f} punti → arrotondata a {int(Decimal(str(auto_result['basis'])).quantize(Decimal('1'), rounding=ROUND_HALF_UP))} punti** · "
-                   f"seduta {auto_result['reference_date']} · {auto_result['bar_count']} barre a 15 minuti "
-                   f"· min {auto_result['minimum']:.2f} / max {auto_result['maximum']:.2f} "
-                   f"· ultimo {auto_result['last']:.2f}. Fonte: {auto_result['source']}.")
+        technical_notes.append(
+            f"**Differenziale automatico.** Proposta {auto_result['basis']:.2f} punti, "
+            f"arrotondata a {int(Decimal(str(auto_result['basis'])).quantize(Decimal('1'), rounding=ROUND_HALF_UP))} punti · "
+            f"seduta {auto_result['reference_date']} · {auto_result['bar_count']} barre a 15 minuti "
+            f"· min {auto_result['minimum']:.2f} / max {auto_result['maximum']:.2f} "
+            f"· ultimo {auto_result['last']:.2f}. Fonte: {auto_result['source']}."
+        )
     try:
         offset = None if not offset_txt.strip() else float(offset_txt.replace(',', '.'))
     except ValueError:
@@ -320,7 +326,12 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     weekly_exp = weekly_expiry(day)
     if day.weekday() >= 5:
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
-    st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
+    st.caption(f"**Scadenze:** 0DTE {day:%d/%m/%Y} · Weekly {weekly_exp:%d/%m/%Y}")
+    technical_notes.append(
+        "Selezione Weekly Serafini: dal lunedì al giovedì venerdì corrente; "
+        "il venerdì, venerdì successivo. In caso di festività occorre "
+        "verificare la scadenza effettiva disponibile nel CSV."
+    )
     # Mostra il perimetro REALE del CSV: una fotografia scaricata con
     # filtro "dicembre" non è la catena 0DTE della data di acquisizione.
     # Legge soltanto le scadenze dei contratti, senza aggiungere strike
@@ -347,7 +358,7 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     computed_profiles = {}
     candidate_0dte = None
     if day.weekday() == 4:
-        st.info('Venerdì: il profilo 0DTE è quello di oggi, mentre il Weekly usa il venerdì SUCCESSIVO (conferma diretta di Serafini).')
+        st.caption("Venerdì: 0DTE odierna · Weekly venerdì successivo.")
     # Build both profiles before drawing so the same numeric range is available.
     profile_errors = {}
     for title, expiry in [('0DTE', day), ('Weekly', weekly_exp)]:
@@ -374,9 +385,8 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             f'{date_display} · {slot_label}{clock_label} · {snapshot_name}'
         )
     if selector_external:
-        st.caption(f'Rilevamento selezionato: {acquisition_label} · '
-                   f'Timestamp Cboe: {timestamp or "n.d."} · '
-                   f'Cboe: {quality_label} · file {choice}')
+        if quality != "PRIMO RILEVAMENTO":
+            st.caption(f"Qualità Cboe: **{quality_label}**.")
     else:
         col_snapshot, col_snapshot_info = st.columns(
             [1.25, 2.75], gap='small', vertical_alignment='bottom')
@@ -384,14 +394,17 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             st.selectbox('Snapshot originale Cboe', names, key=selection_key,
                          format_func=lambda snapshot_name: snapshot_menu_labels.get(snapshot_name, snapshot_name))
         with col_snapshot_info:
-            st.caption(f'Rilevamento selezionato: {acquisition_label} · '
-                       f'Timestamp Cboe: {timestamp or "n.d."} · '
-                       f'Cboe: {quality_label} · file {choice}')
+            st.caption(f"Rilevamento: {acquisition_label} · qualità {quality_label}.")
+    technical_notes.append(
+        f"**Fotografia selezionata.** {acquisition_label} · "
+        f"timestamp Cboe: {timestamp or 'N/D'} · "
+        f"qualità {quality_label} · file {choice}."
+    )
     if computed_profiles.get('0DTE', {}).get('rows'):
-        st.markdown(
-            '**Priorità operativa alle 0DTE:** Serafini richiama un peso '
-            'numerico del **60% per le 0DTE** e del **23% per le Weekly** '
-            'e, in caso di dubbio, privilegia i livelli 0DTE più marcati.'
+        technical_notes.append(
+            "**Priorità descrittiva Serafini:** peso numerico indicato "
+            "60% 0DTE, 23% Weekly; in caso di dubbio privilegiare "
+            "le concentrazioni 0DTE più marcate. Non è un segnale validato."
         )
     elif computed_profiles.get('Weekly', {}).get('rows'):
         st.info(
@@ -480,20 +493,24 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             visual_profiles[title] = core
     if show_visual_extension:
         if fallback_buffer is None:
-            st.caption(
-                'Estensione intelligente: **' + range_reference + '**. '
-                'Margine adattivo di sicurezza 0,25–1% SPX; '
-                '50 strike se sufficienti, fino a 200 strike Cboe '
-                'autentici/scadenza quando il range multi-seduta lo richiede.'
+            technical_notes.append(
+                "**Estensione grafica:** " + range_reference + ". "
+                "Margine adattivo di sicurezza 0,25–1% SPX; "
+                "50 strike se sufficienti, fino a 200 strike Cboe "
+                "autentici per scadenza quando il range multi-seduta lo richiede."
             )
         else:
             st.caption(
-                'Estensione di sicurezza **±5% dalla fascia del riferimento '
-                'SPX e dello spot Cboe**, perché il range delle ultime '
-                '3–5 RTH complete ES=F non è verificabile (o manca il '
-                'differenziale ES-SPX). Si usano solo strike presenti '
-                'nel CSV, max 200/scadenza. Non è una misurazione del '
-                'range effettivamente percorso.'
+                "Estensione grafica: **fascia di sicurezza ±5%** "
+                "(range RTH non verificabile)."
+            )
+            technical_notes.append(
+                "**Estensione di sicurezza:** ±5% dalla fascia del "
+                "riferimento SPX e dello spot Cboe perché le ultime "
+                "3–5 RTH complete ES=F non sono verificabili, oppure "
+                "manca il differenziale ES−SPX. Solo strike presenti "
+                "nel CSV, massimo 200 per scadenza. Non è una misurazione "
+                "del range effettivamente percorso."
             )
     # Riepilogo CANONICO: solo profili Serafini 25+25, non gli strike
     # selezionati per la grafica. Il valore NON cambia attivando
@@ -527,14 +544,17 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                     f'{formatted}</div>',
                     unsafe_allow_html=True,
                 )
-        st.caption(
+        technical_notes.append(
             f"**Totali originali Serafini:** {core_summary['profiles']} scadenze, "
             f"{core_summary['strikes']} strike (25 sopra e 25 sotto per scadenza). "
-            "L'estensione dinamica modifica solo i grafici, mai questi totali."
+            "L'estensione modifica solo i grafici, mai questi totali."
         )
     shared_bounds = profile_gamma_bounds(visual_profiles.values())
-    st.caption('Tooltip: componente Call positiva, componente Put negativa e saldo netto '
-               'della formula Serafini (OI + Volume) × Gamma; non valori monetari delle posizioni.')
+    technical_notes.append(
+        "**Formula e tooltip:** componente Call positiva, Put negativa e saldo "
+        "netto Serafini (OI + Volume) × Gamma; non rappresentano "
+        "valori monetari di posizioni osservate."
+    )
     independent_scale = st.checkbox(
         'Ingrandisci ogni profilo con scala indipendente', value=False,
         key='gamma_independent_scale_v1',
