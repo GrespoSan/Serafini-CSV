@@ -356,8 +356,8 @@ def _add_priority_strike_annotations(fig, labels, *, low, high):
     Le Walls vengono disegnate per ultime, quindi restano in primo piano.
     """
     priority = {
-        "Call Wall": 0, "Put Wall": 1, "Gamma Flip": 2,
-        "Prezzo CSV": 3, "Prezzo ES": 4,
+        "Call+Put Wall": -1, "Call Wall": 0, "Put Wall": 1,
+        "Gamma Flip": 2, "Prezzo CSV": 3, "Prezzo ES": 4,
     }
     plot_height = 760 - 88 - 54  # altezza Plotly al netto dei margini
     separation = 27  # pixel: evita cartellini alti circa 20-23px
@@ -480,6 +480,29 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%", es
             "text": f"<b>{box_label} &nbsp; {price:,.2f}</b>",
             "background": background, "color": color,
             "foreground": foreground,
+        })
+
+    # Coincidenza REALE del Call Wall e Put Wall: un solo cartellino
+    # che dichiara entrambi. I due livelli/tracce restano separati,
+    # con gli stessi prezzi e lo stesso GEX. Non unire livelli solo vicini.
+    call_label = next((m for m in pending_labels
+                       if m["kind"] == "Call Wall"), None)
+    put_label = next((m for m in pending_labels
+                      if m["kind"] == "Put Wall"), None)
+    if (call_label is not None and put_label is not None
+            and math.isclose(call_label["price"], put_label["price"],
+                             rel_tol=0.0, abs_tol=1e-9)):
+        pending_labels = [
+            m for m in pending_labels
+            if m["kind"] not in ("Call Wall", "Put Wall")
+        ]
+        common_price = call_label["price"]
+        pending_labels.append({
+            "kind": "Call+Put Wall", "price": common_price,
+            "text": (f"<b>CALL WALL + PUT WALL / {display_symbol}"
+                     f" &nbsp; {common_price:,.2f}</b>"),
+            "background": "#20222b", "color": "#a8cc77",
+            "foreground": "#f3f7e8",
         })
 
     # Riferimento ES indipendente dal CSV, ottenuto dallo stesso cache
