@@ -5,7 +5,7 @@ from datetime import date
 from zoneinfo import ZoneInfo
 from datetime import datetime
 import streamlit as st
-from net_gamma import profile, read_snapshot, visual_profile, gamma_component_totals
+from net_gamma import profile, read_snapshot, parse_contract, visual_profile, gamma_component_totals
 from feed_quality import timestamp_state
 from volatility_levels import weekly_expiry
 from gamma_scale import profile_gamma_bounds, gamma_components
@@ -321,6 +321,25 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     if day.weekday() >= 5:
         st.error('Snapshot in giorno non operativo: scegliere manualmente una giornata valida.'); return
     st.caption(f'0DTE: {day.isoformat()} · Weekly: {weekly_exp.isoformat()} (lun–gio venerdì corrente; venerdì successivo). In caso di festività controllare la scadenza effettiva.')
+    # Mostra il perimetro REALE del CSV: una fotografia scaricata con
+    # filtro "dicembre" non è la catena 0DTE della data di acquisizione.
+    # Legge soltanto le scadenze dei contratti, senza aggiungere strike
+    # né cambiare la regola Serafini o gli input del Pine.
+    found_expiries = sorted({
+        item[0]
+        for option in snap['data']['options']
+        if (item := parse_contract(str(option.get('option') or ''))) is not None
+    })
+    if found_expiries and day not in found_expiries:
+        st.info(
+            f"**0DTE del {day:%d/%m/%Y} assente nel CSV caricato.** "
+            f"Scadenze effettivamente presenti: "
+            f"**{found_expiries[0]:%d/%m/%Y} – "
+            f"{found_expiries[-1]:%d/%m/%Y}**. "
+            f"La Weekly di {weekly_exp:%d/%m/%Y} è una scadenza "
+            "diversa da quella odierna, non un sostituto della 0DTE. "
+            "Controlla i filtri per scadenza nel download Cboe."
+        )
     st.session_state[f'gamma_compare_context_{week}'] = {
         'day': day, 'ref': ref, 'offset': offset, 'weekly_exp': weekly_exp,
         'snapshot': choice,
