@@ -174,8 +174,13 @@ def _live_es_curve(report, spot, *, symbol, es_spx_basis, selected):
                 "La curva rimane riferita al CSV, non viene ricalcolata."
             )
         else:
-            st.caption("**Prezzo ES: N/D** — quotazione Yahoo non disponibile/aggiornata. "
-                       "Nessun prezzo simulato con il differenziale ES−SPX.")
+            st.caption("**Prezzo ES Yahoo: N/D** — nessuna quotazione recuperata "
+                       "e validata entro 90 minuti. Non significa che Yahoo "
+                       "non pubblichi il future. Nessun prezzo simulato "
+                       "con il differenziale ES−SPX.")
+            if quote and quote.get("error"):
+                with st.expander("Diagnostica recupero Yahoo", expanded=False):
+                    st.caption(str(quote["error"]))
     if symbol=="SPX" and quote and quote.get("price") is not None and not quote_inside_curve(
             report,quote,symbol=symbol,es_spx_basis=es_spx_basis):
         st.caption("La quotazione ES è fuori dal range ±10% della fotografia CSV: "
@@ -249,8 +254,8 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
     display_symbol = gex_price_label(symbol)
     marker_on_curve(
         gex_display_price(spot, symbol, es_spx_basis),
-        f"Spot modello GEX · {display_symbol} equivalente" if symbol == "SPX"
-        else f"Spot modello GEX · {display_symbol}",
+        f"Spot CSV · {display_symbol} equivalente (ora fotografia)" if symbol == "SPX"
+        else f"Spot CSV · {display_symbol} (ora fotografia)",
         "#e5e7eb", "#9ca3af", 10,
     )
     for field, label, color, dash in (
@@ -381,7 +386,7 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
         ("Call Wall", report["call_wall"], "#8fe10a", "solid", "#8fe10a", "#13210c"),
         ("Put Wall", report["put_wall"], "#9634db", "solid", "#9634db", "#ffffff"),
         ("Gamma Flip", report["flip"], "#c084fc", "dot", "#251237", "#e9c7ff"),
-        ("Spot modello GEX", spot, "#e2e8f0", "dash", "#e2e8f0", "#111827"),
+        ("Spot CSV · ora fotografia", spot, "#e2e8f0", "dash", "#e2e8f0", "#111827"),
     ]
     offscreen = []
     for label, raw, color, dash, background, foreground in markers:
