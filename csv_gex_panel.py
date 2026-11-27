@@ -442,11 +442,8 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
 
 def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> None:
     st.caption(
-        "**Modulo GEX locale, modello Edge-style.** "
-        "Dati di base dal CSV Cboe; Open Interest dal CSV oppure da OCC, "
-        "secondo la fonte effettivamente utilizzata. "
-        "**Nessun download Alpaca/OPRA.** "
-        "NET GAMMA Serafini e GEX rimangono distinti."
+        "GEX Edge-style da CSV Cboe · OI da CSV o OCC · "
+        "NET GAMMA Serafini separato."
     )
     if not payload or not symbol:
         st.info("Carica una fotografia CSV Cboe nel modulo NET GAMMA "
@@ -462,10 +459,9 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
               "OCC only: nessun fallback. La data OI non è certificata "
               "dal file OCC Series Search.")
     )
-    st.markdown(
-        f"**Sottostante CSV:** {symbol} · "
-        + ("**Livelli visualizzati:** ES/MES · " if symbol == "SPX" else "")
-        + f"**Identità CSV:** {digest[:12]}"
+    st.caption(
+        f"**Sottostante:** {symbol}"
+        + (" · **Prezzi su ES/MES**" if symbol == "SPX" else "")
     )
     labels = {
         "Rilevamento automatico (blocco se IV ambigua)": "auto",
@@ -510,67 +506,87 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
             f"{provenance['oi_source']}  \n"
             f"**Ora download OCC:** {provenance['oi_download_clock']}"
         )
-    st.caption(
-        f"**Data reale OI:** {provenance['oi_vintage']}. "
-        f"**Alpaca/OPRA:** {provenance['alpaca']}. "
-        + provenance["note"]
-    )
-    st.caption(
-        f"**Modello:** {MODEL_LABEL} · "
-        "**Calcolo automatico:** il Pine include i livelli GEX quando "
-        "superano i controlli di qualità · "
-        f"Contratti analizzati: {info['csv_contracts']} · "
-        f"OI assenti nel CSV: {info['oi_missing']} · "
-        f"IV assenti: {info['iv_missing']}."
-    )
-    if oi.get("effective_source") == "OCC_SERIES_SEARCH":
-        st.caption(
-            f"**Riconciliazione OCC:** {oi.get('matched')}/{oi.get('eligible')} "
-            f"contratti nella banda ±10% spot ({oi.get('match_pct')}%). "
-            "Il prezzo e la IV restano quelli della fotografia Cboe."
-        )
-    if oi.get("fallback_reason"):
-        st.warning(
-            "**Fallback OCC → CSV dichiarato:** "+str(oi["fallback_reason"]) +
-            ". I valori GEX e il Pine sono calcolati soltanto con l'OI CSV."
-        )
-    st.caption(info["iv_note"])
-    # Le due scadenze sono sempre visibili contemporaneamente.
-    # Solo i grafici 0DTE (Daily) vengono renderizzati più sotto.
+    # Riepilogo operativo: fonte e orari sono già leggibili sopra.
+    # Modello, audit OI/IV, identity, spot implicito e conversione ES
+    # rimangono consultabili, senza duplicare paragrafi sullo schermo.
     reports = info["reports"]
     report = reports.get("0DTE") or {}
     spot_info = info.get("spot_info") or {}
-    if spot_info.get("method") == "SPXW_0DTE_PUT_CALL_PARITY_R0_Q0":
-        st.caption(f"**SPX implicito dalle opzioni: {info['spot']:,.2f}** · "
-                   f"Last CSV (cash precedente): {info['csv_last']:,.2f} · "
-                   f"{spot_info['pairs']} coppie SPXW 0DTE coerenti · "
-                   "stima diagnostica, non quotazione cash live.")
-    price_symbol = gex_price_label(symbol)
-    basis_available = (symbol != "SPX" or
-                       (es_spx_basis is not None and
-                        math.isfinite(float(es_spx_basis))))
+    basis_available = (
+        symbol != "SPX"
+        or (es_spx_basis is not None and math.isfinite(float(es_spx_basis)))
+    )
     if symbol == "SPX":
         if basis_available:
             st.caption(
-                f"**Livelli esclusivamente ES/MES**, con differenziale ES − SPX "
-                f"di **{es_spx_basis:+.2f} punti** (stesso valore applicato nel Pine). "
-                "La curva GEX resta calcolata su SPX: si trasla solo l'asse prezzi."
+                f"**Prezzi in ES/MES** · basis ES−SPX "
+                f"**{es_spx_basis:+.2f} pt** · "
+                "**GEX modellato, non certificato**."
             )
         else:
             st.warning(
-                "Differenziale ES − SPX non disponibile. "
-                "Call Wall, Put Wall e Gamma Flip su ES: N/D. "
-                "Il GEX è comunque calcolato sul CSV; nessun prezzo SPX "
-                "viene presentato come livello ES."
+                "**Basis ES−SPX non disponibile:** "
+                "Call Wall, Put Wall e Gamma Flip in ES sono N/D. "
+                "Il GEX resta calcolato sul CSV senza inventare prezzi."
             )
+    else:
+        st.caption("**GEX modellato, non certificato** · "
+                   "livelli sul sottostante del CSV.")
+
+    # Il fallback OCC→CSV è un cambio di fonte: non va nascosto.
+    if oi.get("fallback_reason"):
+        st.warning(
+            "**OI: fallback OCC → CSV** · "
+            + str(oi["fallback_reason"])
+            + ". I livelli sono calcolati con l'OI CSV."
+        )
+
+    with st.expander("Dettagli tecnici · fonti, qualità e metodo", expanded=False):
+        st.caption(
+            f"**Identità CSV:** {digest[:12]} · "
+            f"**Data reale OI:** {provenance['oi_vintage']}. "
+            f"**Alpaca/OPRA:** {provenance['alpaca']}. "
+            + provenance["note"]
+        )
+        st.caption(
+            f"**Modello:** {MODEL_LABEL} · "
+            "Il Pine include i livelli GEX solo quando superano "
+            "i controlli di qualità. "
+            f"Contratti analizzati: {info['csv_contracts']} · "
+            f"OI assenti nel CSV: {info['oi_missing']} · "
+            f"IV assenti: {info['iv_missing']}."
+        )
+        if oi.get("effective_source") == "OCC_SERIES_SEARCH":
+            st.caption(
+                f"**Riconciliazione OCC:** "
+                f"{oi.get('matched')}/{oi.get('eligible')} contratti "
+                f"nella banda ±10% spot ({oi.get('match_pct')}%). "
+                "Il prezzo e la IV restano quelli della fotografia Cboe."
+            )
+        st.caption(info["iv_note"])
+        if spot_info.get("method") == "SPXW_0DTE_PUT_CALL_PARITY_R0_Q0":
+            st.caption(
+                f"**SPX implicito dalle opzioni: {info['spot']:,.2f}** · "
+                f"Last CSV (cash precedente): {info['csv_last']:,.2f} · "
+                f"{spot_info['pairs']} coppie SPXW 0DTE coerenti · "
+                "stima diagnostica, non quotazione cash live."
+            )
+        if symbol == "SPX" and basis_available:
+            st.caption(
+                f"**Livelli ES/MES:** differenziale ES−SPX "
+                f"{es_spx_basis:+.2f} punti, uguale al Pine. "
+                "La curva GEX è calcolata su SPX: "
+                "si trasla soltanto l'asse prezzi."
+            )
+        st.caption(
+            "La Daily e la Weekly usano la stessa fotografia e fonte OI, "
+            "ma sono calcolate su contratti di scadenze diverse. "
+            "Il GEX è diagnostico: non rappresenta posizioni dealer "
+            "osservate né un segnale operativo."
+        )
+    # I dati del report e gli avvisi di qualità sono invariati.
     # Due riquadri DARK, ciascuno legge esclusivamente la propria
     # scadenza GEX già calcolata; nessuna Weekly usata al posto della 0DTE.
-    st.caption(
-        "**GEX modellato · diagnostico, non certificato.** "
-        "Le due schede utilizzano lo stesso CSV e la medesima fonte OI "
-        "riportata sopra, ma ciascuna scadenza è valutata separatamente. "
-        "I livelli non rappresentano posizioni dealer osservate."
-    )
     left, right = st.columns(2, gap="medium")
     with left:
         st.html(_gex_summary_card_html(
