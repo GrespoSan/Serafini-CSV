@@ -200,8 +200,12 @@ with st.expander("ANALISI NET GAMMA", expanded=True):
                 st.session_state[f"serafini_selected_snapshot_{week}"] = store.filename
                 asia_panel = render(store, week, snaps, [], show_heading=False, selector_external=True)
                 if role == "admin" and asia_panel:
-                    st.caption("MT4: 100 strike reali per scadenza (50+50); il nucleo 25+25 resta invariato. Stesso feed manuale di SPX.")
-                    if st.button("INVIA A MT4", type="primary", key="csv_mt4_send"):
+                    if st.button(
+                        "INVIA A MT4", type="primary", key="csv_mt4_send",
+                        help="Invia 100 strike reali per scadenza (50+50). "
+                             "Il nucleo Serafini 25+25 resta invariato; "
+                             "stesso feed manuale di SPX.",
+                    ):
                         try:
                             from mt4_manual import build_feed, publish, ManualStore
                             payload = build_feed(
