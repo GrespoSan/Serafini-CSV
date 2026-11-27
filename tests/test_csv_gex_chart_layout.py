@@ -54,6 +54,34 @@ class GEXChartLayoutTests(unittest.TestCase):
         self.assertLess(source.index(controls), source.rindex(figure))
         self.assertEqual(source.count('with st.expander("Come leggere il grafico"'), 1)
 
+    def test_operational_gex_guide_is_inside_collapsed_help_only(self):
+        source = (Path(__file__).resolve().parents[1] /
+                  "csv_gex_panel.py").read_text(encoding="utf-8")
+        title = 'with st.expander("Come leggere il grafico", expanded=False):'
+        intro = '### Come interpretare e utilizzare il GEX'
+        price = 'Confrontare il prezzo ES attuale con Call Wall, Put Wall e Gamma Flip.'
+        controls = 'selected_window = st.segmented_control('
+        self.assertEqual(source.count(intro), 1)
+        self.assertLess(source.index(title), source.index(intro))
+        self.assertLess(source.index(intro), source.index(price))
+        self.assertLess(source.index(price), source.index(controls))
+        for piece in (
+            "**1. Regime GEX**",
+            "**POSITIVO:**",
+            "**NEGATIVO:**",
+            "Il segno del GEX non indica automaticamente LONG o SHORT.",
+            "**2. Call Wall, Put Wall e Gamma Flip**",
+            "non supporti o resistenze garantiti.",
+            "Non è necessariamente un livello di inversione del mercato.",
+            "**3. Come utilizzare i livelli**",
+            "candele chiuse, VWAP e struttura del movimento.",
+            "**0DTE per il contesto intraday**",
+            "**Weekly per il contesto delle scadenze successive**",
+            "Nessun livello costituisce da solo una conferma d'ingresso.",
+        ):
+            self.assertIn(piece, source)
+        self.assertNotIn('st.expander("Come interpretare e utilizzare il GEX"', source)
+
     def test_visible_primary_chart_with_default_2_percent_and_4_choices(self):
         panel = (Path(__file__).resolve().parents[1] /
                  "csv_gex_panel.py").read_text(encoding="utf-8")
