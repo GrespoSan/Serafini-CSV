@@ -177,6 +177,42 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(result["symbol"],"ES=F")
         self.assertEqual(result["price"],7292.25)
 
+    def test_yahoo_meta_quote_uses_original_market_timestamp(self):
+        now = datetime(2026, 11, 27, 8, 30, tzinfo=timezone.utc)
+        timestamp = int((now - timedelta(minutes=15)).timestamp())
+        doc = json.dumps({"chart": {"result": [{
+            "meta": {"symbol": "ES=F",
+                     "regularMarketPrice": 7319.75,
+                     "regularMarketTime": timestamp},
+            "timestamp": [], "indicators": {"quote": [{"close": []}]},
+        }]}}).encode()
+        q = parse_chart(doc, "ES=F", now)
+        self.assertEqual(q["price"], 7319.75)
+        self.assertEqual(q["age_minutes"], 15.0)
+        self.assertEqual(q["source"], "YAHOO_FINANCE_CHART")
+
+    def test_yahoo_meta_stale_does_not_bypass_90m(self):
+        now = datetime(2026, 11, 27, 8, 30, tzinfo=timezone.utc)
+        timestamp = int((now - timedelta(minutes=93)).timestamp())
+        doc = json.dumps({"chart": {"result": [{
+            "meta": {"symbol": "ES=F",
+                     "regularMarketPrice": 7319.75,
+                     "regularMarketTime": timestamp},
+            "timestamp": [], "indicators": {"quote": [{"close": []}]},
+        }]}}).encode()
+        with self.assertRaisesRegex(ValueError, "90 minuti"):
+            parse_chart(doc, "ES=F", now)
+
+    def test_yahoo_meta_symbol_mismatch_rejected(self):
+        now = datetime(2026, 11, 27, 8, 30, tzinfo=timezone.utc)
+        doc = json.dumps({"chart": {"result": [{
+            "meta": {"symbol": "NQ=F", "regularMarketPrice": 7319.75,
+                     "regularMarketTime": int(now.timestamp())},
+            "timestamp": [], "indicators": {"quote": [{"close": []}]},
+        }]}}).encode()
+        with self.assertRaisesRegex(ValueError, "Simbolo Yahoo differente"):
+            parse_chart(doc, "ES=F", now)
+
     def test_yahoo_query2_fallback_when_query1_blocked(self):
         # Simula un blocco di query1 (p.es. HTTP 429 da cloud):
         # la stessa quotazione Yahoo deve essere recuperata su query2.
