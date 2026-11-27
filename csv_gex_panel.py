@@ -164,22 +164,27 @@ def _live_es_curve(report, spot, *, symbol, es_spx_basis, selected):
     if symbol=="SPX":
         if quote and quote.get("price") is not None:
             k=quote["symbol"]
+            is_massive=quote.get("source")=="MASSIVE_FUTURES_5MIN"
+            provider=("Massive Futures · ultima barra 5m chiusa"
+                      if is_massive else "Yahoo Finance · quotazione ritardata")
             label=("contratto trimestrale" if quote["contract_kind"]=="EXPLICIT"
-                   else "continuo Yahoo: può differire da ESZ26")
+                   else "futures continuo Yahoo: possibile differenza di contratto")
             st.caption(
-                f"**ES · {quote['price']:,.2f}** · {k} ({label}) · "
-                f"{quote['observed_rome']} Roma · "
-                f"età osservazione {quote['age_minutes']:.1f} minuti · "
-                "Yahoo Finance, quotazione potenzialmente ritardata. "
+                f"**ES · {quote['price']:,.2f}** · {provider} · {k} ({label}) · "
+                f"**{quote['observed_rome']} Roma** · "
+                f"età osservazione **{quote['age_minutes']:.1f} minuti**. "
+                "Riferimento indicativo, non prezzo in tempo reale. "
                 "La curva rimane riferita al CSV, non viene ricalcolata."
             )
         else:
-            st.caption("**Prezzo ES Yahoo: N/D** — nessuna quotazione recuperata "
-                       "e validata entro 90 minuti. Non significa che Yahoo "
-                       "non pubblichi il future. Nessun prezzo simulato "
-                       "con il differenziale ES−SPX.")
+            st.caption(
+                "**Prezzo ES: N/D** — né Yahoo né Massive hanno fornito "
+                "un'osservazione verificabile entro 90 minuti. "
+                "Non significa che il future non sia quotato. "
+                "Nessun prezzo ricostruito dal differenziale ES−SPX."
+            )
             if quote and quote.get("error"):
-                with st.expander("Diagnostica recupero Yahoo", expanded=False):
+                with st.expander("Diagnostica fonti prezzo ES", expanded=False):
                     st.caption(str(quote["error"]))
     if symbol=="SPX" and quote and quote.get("price") is not None and not quote_inside_curve(
             report,quote,symbol=symbol,es_spx_basis=es_spx_basis):
@@ -273,7 +278,9 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
                           es_spx_basis=es_spx_basis):
         actual = float(es_quote["price"])
         marker_on_curve(
-            actual, f"ES Yahoo · {actual:,.2f} ({es_quote['symbol']})",
+            actual,
+            f"ES {'Massive 5m' if es_quote.get('source') == 'MASSIVE_FUTURES_5MIN' else 'Yahoo'}"
+            f" · {actual:,.2f} ({es_quote['symbol']})",
             "#fb923c", "#fdba74", 12,
         )
 
@@ -674,8 +681,8 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
         st.divider()
         st.subheader("Curva teorica GEX · scenario prezzo — 0DTE (Daily)")
         st.caption(
-            "Legenda superiore: curva NET GEX azzurra, Spot CSV come pallino "
-            "grigio chiaro, ES Yahoo come pallino arancione (se disponibile). "
+            "Legenda superiore: curva NET GEX azzurra, Prezzo CSV come pallino "
+            "grigio chiaro, ultimo ES Yahoo/Massive come pallino arancione (se disponibile). "
             "Call Wall, Put Wall e Gamma Flip rimangono linee verticali "
             "di riferimento, non previsioni del percorso futuro."
         )
