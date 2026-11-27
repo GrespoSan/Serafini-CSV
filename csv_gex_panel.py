@@ -817,11 +817,10 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
     )
     if basis_available:
         st.subheader("GEX by Strike · composizione Call / Put — 0DTE (Daily)")
-        st.caption("**PUTS ←** viola · **CALLS →** verde. "
-                   "Prezzi e livelli sono indicati nella legenda.")
         with st.expander("Come leggere il grafico", expanded=False):
+            st.caption("**PUTS ←** viola · **CALLS →** verde. "
+                       "Prezzi e livelli sono indicati nella legenda.")
             st.caption(
-                "**PUTS − a sinistra (viola)** · **CALLS + a destra (verde)**. "
                 "La linea chiara indica il Prezzo CSV alla fotografia "
                 + ("in equivalente ES; NON è la quotazione ES attuale. "
                    "La linea arancione tratteggiata indica il prezzo futures "
