@@ -111,6 +111,80 @@ class GEXChartLayoutTests(unittest.TestCase):
         xlo, xhi = fig.layout.xaxis.range
         self.assertAlmostEqual(xlo, -xhi)
 
+    def test_walls_are_foreground_when_csv_and_yahoo_overlap(self):
+        # Caso simile allo screenshot: Call Wall, Put Wall, Prezzo CSV e
+        # Yahoo sono molto vicini ma nessun cartellino deve coprirne altri.
+        report, spot = example_report()
+        original = copy.deepcopy(report)
+        report["call_wall"] = 7202.0  # ES 7,219.00
+        report["put_wall"] = 7200.0   # ES 7,217.00 (uguale al CSV)
+        frozen = copy.deepcopy(report)
+        fig = _strikes_chart(
+            report, symbol="SPX", spot=spot, es_spx_basis=17.0,
+            window="±2%", es_quote={
+                "price": 7218.50, "source": "YAHOO_FINANCE_CHART",
+                "symbol": "ESZ26.CME", "age_minutes": 10.0,
+                "observed_rome": "27/11/2026 09:35:00",
+            },
+        )
+        annotations = fig.layout.annotations
+        self.assertEqual(len(annotations), 5)
+        # Plotly dipinge le annotazioni in ordine: le due Walls SONO
+        # le ultime, quindi restano sopra CSV, Yahoo e Gamma Flip.
+        self.assertIn("CALL WALL / ES", annotations[-1].text)
+        self.assertIn("PUT WALL / ES", annotations[-2].text)
+        self.assertAlmostEqual(annotations[-1].y, 7219.0)
+        self.assertAlmostEqual(annotations[-2].y, 7217.0)
+        self.assertNotEqual(annotations[-2].yshift, 0)
+        self.assertTrue(any("PREZZO CSV" in a.text and a.y == 7217.0
+                            and a.yshift != 0 for a in annotations))
+        self.assertTrue(any("PREZZO YAHOO" in a.text and
+                            a.y == 7218.5 and a.yshift != 0
+                            for a in annotations))
+        low, high = fig.layout.yaxis.range
+        height = 760 - 88 - 54
+        pixels = [((a.y - low) / (high - low) * height) + a.yshift
+                  for a in annotations]
+        for i, left in enumerate(pixels):
+            for right in pixels[i+1:]:
+                self.assertGreaterEqual(abs(left - right), 27)
+        # La disposizione non altera i prezzi di traccia né i GEX.
+        self.assertEqual(frozen, report)
+        self.assertAlmostEqual(
+            next(t for t in fig.data if t.name == "Call Wall / ES").y[0],
+            7219.0,
+        )
+        self.assertAlmostEqual(
+            next(t for t in fig.data if t.name == "Put Wall / ES").y[0],
+            7217.0,
+        )
+
+    def test_equal_call_put_wall_prices_keep_both_annotations(self):
+        report, spot = example_report()
+        report["call_wall"] = 7200.0
+        report["put_wall"] = 7200.0
+        fig = _strikes_chart(
+            report, symbol="SPX", spot=spot, es_spx_basis=17,
+            window="±2%",
+        )
+        wall_labels = [a for a in fig.layout.annotations
+                       if "WALL / ES" in a.text]
+        self.assertEqual(len(wall_labels), 2)
+        self.assertEqual([a.y for a in wall_labels], [7217, 7217])
+        self.assertNotEqual(wall_labels[0].yshift, wall_labels[1].yshift)
+        self.assertTrue(all(a.text for a in wall_labels))
+
+    def test_wall_label_out_of_visible_range_not_invented(self):
+        report, spot = example_report()
+        report["call_wall"] = 7900.0
+        fig = _strikes_chart(
+            report, symbol="SPX", spot=spot,
+            es_spx_basis=17.0, window="±2%",
+        )
+        self.assertFalse(any("CALL WALL / ES" in a.text
+                             for a in fig.layout.annotations))
+        self.assertIn("Call Wall", fig.layout.meta["offscreen_levels"])
+
     def test_strikes_legend_and_card_use_exact_prezzo_csv(self):
         report, spot = example_report()
         figure = _strikes_chart(
