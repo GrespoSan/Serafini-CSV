@@ -80,7 +80,8 @@ def _gex_summary_card_html(name: str, report: dict | None, symbol: str,
 
     regime = str(report.get("regime") or "").upper() if valid else ""
     regime_text = regime or "N/D"
-    regime_style = ("negative" if regime == "NEGATIVE" else
+    regime_style = ("positive" if regime == "POSITIVE" else
+                    "negative" if regime == "NEGATIVE" else
                     "na" if regime_text == "N/D" else "normal")
     price_fields = [
         (f"Call Wall {price_unit}", price_value("call_wall")),
@@ -131,6 +132,7 @@ def _gex_summary_card_html(name: str, report: dict | None, symbol: str,
         'min-height:29px;margin-bottom:5px;}'
         '.csv-gex-value{font-size:clamp(1.01rem,1.5vw,1.44rem);'
         'font-weight:600;white-space:nowrap;overflow-wrap:anywhere;}'
+        '.csv-gex-value.positive{color:#18d46d;}'
         '.csv-gex-value.negative{color:#ff5967;}'
         '.csv-gex-value.na{color:#929baa;}'
         '.csv-gex-card-reason{font-size:.78rem;color:#c4a977;'
