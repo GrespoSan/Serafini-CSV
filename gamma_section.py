@@ -547,9 +547,9 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
              "si mostrano solo guide di prezzo rispetto al close ES precedente; "
              "nessun impatto su NET GAMMA o Pine.",
     )
-    # Unica cache ES Yahoo condivisa con la curva GEX. E' una
-    # quotazione INDICATIVA, potenzialmente ritardata, NON il prezzo
-    # dello snapshot Cboe e non cambia il differenziale ES-SPX.
+    # Cache ES Yahoo/Massive condivisa con la curva GEX: solo prezzi
+    # futures osservati e validati <=90m; NON viene modificato basis,
+    # snapshot Cboe, GEX o il Pine.
     try:
         es_quote = (_cached_es_quote() if offset is not None
                     and math.isfinite(offset) else None)
@@ -561,20 +561,25 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
             "differenziale ES−SPX valido per allineare la scala."
         )
     elif es_quote and es_quote.get("price") is not None:
+        provider = ("Massive Futures · barra 5m chiusa" if
+                    es_quote.get("source") == "MASSIVE_FUTURES_5MIN"
+                    else "Yahoo Finance")
         st.caption(
-            f"**Prezzo ES indicativo Yahoo {es_quote['price']:,.2f}** · "
+            f"**ES · {es_quote['price']:,.2f}** · **{provider}** · "
             f"{es_quote['symbol']} · osservato "
-            f"{es_quote['observed_rome']} Roma · "
+            f"**{es_quote['observed_rome']} Roma** · "
             f"età osservazione {es_quote['age_minutes']:.1f} minuti. "
-            "Quotazione potenzialmente ritardata, indipendente dalla "
-            "fotografia CSV Cboe. La linea arancione compare "
-            "sia su 0DTE sia su Weekly."
+            "Quotazione potenzialmente ritardata e indipendente dal "
+            "CSV Cboe. Linea arancione nei profili 0DTE e Weekly."
         )
     else:
         st.caption(
-            "**Prezzo ES attuale: N/D** — Yahoo non restituisce "
-            "una quotazione verificata recente. Nessun prezzo inventato."
+            "**Prezzo ES: N/D** — nessuna quotazione valida <=90 minuti "
+            "da Yahoo o Massive (quando autorizzato). Nessun prezzo inventato."
         )
+        if es_quote and es_quote.get("error"):
+            with st.expander("Diagnostica fonti prezzo ES", expanded=False):
+                st.caption(str(es_quote["error"]))
     profile_cols = st.columns(2, gap='small')
     for (title, expiry), profile_col in zip(
             [('0DTE', day), ('Weekly', weekly_exp)], profile_cols):
