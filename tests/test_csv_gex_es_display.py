@@ -51,7 +51,8 @@ class GEXOnlyESTests(unittest.TestCase):
         self.assertIn("marker_on_curve(\n            actual,", panel)
         self.assertIn("quote_inside_curve(", panel)
         self.assertIn("ES Yahoo · {actual:,.2f}", panel)
-        self.assertIn("**Livelli esclusivamente ES/MES**", panel)
+        self.assertIn("**Prezzi in ES/MES**", panel)
+        self.assertIn("**Livelli ES/MES:** differenziale ES−SPX", panel)
 
 
 if __name__ == "__main__":
