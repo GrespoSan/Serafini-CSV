@@ -177,6 +177,45 @@ class SourceTests(unittest.TestCase):
         self.assertEqual(result["symbol"],"ES=F")
         self.assertEqual(result["price"],7292.25)
 
+    def test_yahoo_query2_fallback_when_query1_blocked(self):
+        # Simula un blocco di query1 (p.es. HTTP 429 da cloud):
+        # la stessa quotazione Yahoo deve essere recuperata su query2.
+        now = datetime(2026, 11, 27, 7, 30, tzinfo=timezone.utc)
+        tick = int((now - timedelta(minutes=11)).timestamp())
+        doc = json.dumps({"chart": {"result": [{
+            "meta": {"symbol": "ES=F"}, "timestamp": [tick],
+            "indicators": {"quote": [{"close": [7318.25]}]},
+        }]}}).encode()
+        calls = []
+        def simulated_request(url):
+            calls.append(url)
+            if "query1.finance.yahoo.com" in url:
+                raise ValueError("Rate limited")
+            if "ESZ26.CME" in unquote(url):
+                raise ValueError("Contratto esplicito non disponibile")
+            return doc
+
+        result = fetch_es_quote(now=now, request=simulated_request)
+        self.assertEqual(result["price"], 7318.25)
+        self.assertEqual(result["age_minutes"], 11.0)
+        self.assertEqual(result["symbol"], "ES=F")
+        self.assertEqual(result["contract_kind"], "CONTINUOUS")
+        self.assertEqual(result["source"], "YAHOO_FINANCE_CHART")
+        self.assertTrue(any("query2.finance.yahoo.com" in x for x in calls))
+        self.assertTrue(all("range=2d&interval=1m" in x for x in calls))
+
+    def test_query2_cannot_bypass_90_minute_limit(self):
+        now = datetime(2026, 11, 27, 7, 30, tzinfo=timezone.utc)
+        old_tick = int((now - timedelta(minutes=93)).timestamp())
+        stale = json.dumps({"chart": {"result": [{
+            "meta": {"symbol": "ES=F"}, "timestamp": [old_tick],
+            "indicators": {"quote": [{"close": [7290.75]}]},
+        }]}}).encode()
+        result = fetch_es_quote(now=now, request=lambda url: stale)
+        self.assertIsNone(result["price"])
+        self.assertIn("Nessuna quotazione ES utilizzabile", result["error"])
+        self.assertIn("query2.finance.yahoo.com", result["error"])
+
     def test_engine_csv_default_unaffected_by_occ_module(self):
         # Existing engine path uses the unmodified CSV OI by default.
         from tests.test_csv_gex_integration import fixture
