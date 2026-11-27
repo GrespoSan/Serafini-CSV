@@ -403,7 +403,8 @@ def _add_priority_strike_annotations(fig, labels, *, low, high):
             xanchor="left", yanchor="middle", yshift=shift,
             text=label["text"], showarrow=False, align="left",
             bgcolor=label["background"], bordercolor=label["color"],
-            borderwidth=1, borderpad=5,
+            borderwidth=(2 if label["kind"] == "Call+Put Wall" else 1),
+            borderpad=5,
             font=dict(family="Arial", size=11, color=label["foreground"]),
         )
 
@@ -501,8 +502,9 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%", es
             "kind": "Call+Put Wall", "price": common_price,
             "text": (f"<b>CALL WALL + PUT WALL / {display_symbol}"
                      f" &nbsp; {common_price:,.2f}</b>"),
-            "background": "#20222b", "color": "#a8cc77",
-            "foreground": "#f3f7e8",
+            # Ciano brillante = coincidenza eccezionale, non bias LONG/SHORT.
+            "background": "#0e4652", "color": "#22d3ee",
+            "foreground": "#ecfeff",
         })
 
     # Riferimento ES indipendente dal CSV, ottenuto dallo stesso cache
