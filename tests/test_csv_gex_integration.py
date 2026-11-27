@@ -134,6 +134,29 @@ class GEXCSVTests(unittest.TestCase):
         self.assertIsNone(result["reports"]["0DTE"]["call_wall"])
         self.assertEqual(result["reports"]["Weekly"]["expiry"], "2026-11-27")
 
+    def test_december_only_spx_csv_explains_missing_november_0dte(self):
+        # 27 novembre 2026, ore 03:03 New York (pre-USA): la catena
+        # contiene esclusivamente scadenze di dicembre. Nessuna
+        # parità 0DTE può essere usata per validare lo SPX implicito.
+        source = fixture()
+        source = source.replace(
+            b"November 20, 2026, 9:00 AM EST",
+            b"November 27, 2026, 3:03 AM EST",
+        )
+        source = source.replace(b"261120", b"261201")
+        source = source.replace(b"261127", b"261204")
+        source = source.replace(
+            b"NVIDIA CORPORATION (NVDA)", b"S&P 500 INDEX (^SPX)"
+        ).replace(b"NVDA", b"SPXW")
+        with self.assertRaisesRegex(
+            ValueError,
+            r"0DTE richiesta \\(2026-11-27\\).*non è presente nel CSV",
+        ) as ctx:
+            analyze_csv_gex(source, "SPX")
+        self.assertIn("2026-12-01", str(ctx.exception))
+        self.assertIn("2026-12-04", str(ctx.exception))
+        self.assertNotIn("meno di 10 coppie", str(ctx.exception))
+
     def test_future_forged_csv_time_refused(self):
         source = fixture().replace(b"November 20, 2026", b"November 20, 2099")
         with self.assertRaisesRegex(ValueError, "data futura"):
