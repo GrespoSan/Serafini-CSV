@@ -829,6 +829,30 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
                 " Wall e Gamma Flip sono contrassegnati da linee orizzontali "
                 "e cartellini a destra. I grafici utilizzano lo stesso report GEX."
             )
+            st.markdown("""
+### Come interpretare e utilizzare il GEX
+
+**1. Regime GEX**
+
+- **POSITIVO:** nel modello, le coperture potrebbero contribuire a contenere le oscillazioni e favorire movimenti più ordinati.
+- **NEGATIVO:** nel modello, le coperture potrebbero amplificare i movimenti e aumentare la volatilità.
+
+Il segno del GEX non indica automaticamente LONG o SHORT.
+
+**2. Call Wall, Put Wall e Gamma Flip**
+
+Le **Wall** individuano concentrazioni modellate di esposizione Gamma: sono aree nelle quali osservare possibili reazioni del prezzo, non supporti o resistenze garantiti.
+
+Il **Gamma Flip** rappresenta il prezzo teorico in cui il NET GEX cambia segno nello scenario calcolato. Non è necessariamente un livello di inversione del mercato.
+
+**3. Come utilizzare i livelli**
+
+Confrontare il prezzo ES attuale con Call Wall, Put Wall e Gamma Flip. Verificare se il prezzo respinge, attraversa o consolida intorno a questi riferimenti, cercando conferme su candele chiuse, VWAP e struttura del movimento.
+
+Utilizzare **0DTE per il contesto intraday** e **Weekly per il contesto delle scadenze successive**, senza sommarne automaticamente le esposizioni.
+
+**Importante:** il GEX è modellato e diagnostico, non certificato. Prima di utilizzarlo, verificare fonte, orario e qualità dei dati. Nessun livello costituisce da solo una conferma d'ingresso.
+            """)
         selected_window = st.segmented_control(
             "Intervallo di prezzo attorno allo spot utilizzato dal modello GEX",
             options=list(GEX_STRIKE_WINDOWS),
