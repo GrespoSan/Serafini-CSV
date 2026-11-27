@@ -159,20 +159,68 @@ class GEXChartLayoutTests(unittest.TestCase):
             7217.0,
         )
 
-    def test_equal_call_put_wall_prices_keep_both_annotations(self):
+    def test_equal_call_put_wall_prices_make_one_priority_label(self):
         report, spot = example_report()
         report["call_wall"] = 7200.0
         report["put_wall"] = 7200.0
+        original = copy.deepcopy(report)
         fig = _strikes_chart(
             report, symbol="SPX", spot=spot, es_spx_basis=17,
             window="±2%",
         )
         wall_labels = [a for a in fig.layout.annotations
-                       if "WALL / ES" in a.text]
+                       if "WALL" in a.text]
+        self.assertEqual(len(wall_labels), 1)
+        self.assertIn("CALL WALL + PUT WALL / ES", wall_labels[0].text)
+        self.assertIn("7,217.00", wall_labels[0].text)
+        self.assertAlmostEqual(wall_labels[0].y, 7217.0)
+        # Cartellino unificato prioritario, sopra CSV/Gamma Flip.
+        self.assertEqual(fig.layout.annotations[-1], wall_labels[0])
+        self.assertEqual(len(fig.layout.annotations), 3)
+        # Entrambe le linee e le voci di legenda restano indipendenti.
+        call = next(t for t in fig.data if t.name == "Call Wall / ES")
+        put = next(t for t in fig.data if t.name == "Put Wall / ES")
+        self.assertEqual(list(call.y), [7217.0, 7217.0])
+        self.assertEqual(list(put.y), [7217.0, 7217.0])
+        self.assertEqual(call.line.color, "#8fe10a")
+        self.assertEqual(put.line.color, "#9634db")
+        self.assertEqual(original, report)
+
+    def test_near_but_different_walls_keep_independent_labels(self):
+        report, spot = example_report()
+        report["call_wall"] = 7200.0
+        report["put_wall"] = 7200.01
+        fig = _strikes_chart(
+            report, symbol="SPX", spot=spot, es_spx_basis=17,
+            window="±2%",
+        )
+        wall_labels = [a for a in fig.layout.annotations
+                       if "WALL" in a.text]
         self.assertEqual(len(wall_labels), 2)
-        self.assertEqual([a.y for a in wall_labels], [7217, 7217])
-        self.assertNotEqual(wall_labels[0].yshift, wall_labels[1].yshift)
-        self.assertTrue(all(a.text for a in wall_labels))
+        self.assertFalse(any("CALL WALL + PUT WALL" in a.text
+                             for a in wall_labels))
+        self.assertEqual(sorted(round(a.y, 2) for a in wall_labels),
+                         [7217.00, 7217.01])
+
+    def test_equal_walls_with_yahoo_on_same_price_keeps_combined_on_top(self):
+        report, spot = example_report()
+        report["call_wall"] = report["put_wall"] = spot
+        fig = _strikes_chart(
+            report, symbol="SPX", spot=spot, es_spx_basis=17,
+            window="±2%", es_quote={
+                "price": 7217.0, "source": "YAHOO_FINANCE_CHART",
+                "symbol": "ESZ26.CME", "age_minutes": 8,
+                "observed_rome": "27/11/2026 09:35:00",
+            },
+        )
+        self.assertEqual(len(fig.layout.annotations), 4)
+        self.assertIn("CALL WALL + PUT WALL", fig.layout.annotations[-1].text)
+        labels = fig.layout.annotations
+        self.assertEqual(len([a for a in labels if "WALL" in a.text]), 1)
+        self.assertTrue(any("PREZZO YAHOO" in a.text for a in labels))
+        self.assertTrue(any("PREZZO CSV" in a.text for a in labels))
+        self.assertEqual(len([t for t in fig.data
+                              if "Wall / ES" in t.name]), 2)
 
     def test_wall_label_out_of_visible_range_not_invented(self):
         report, spot = example_report()
