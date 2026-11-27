@@ -150,7 +150,7 @@ class GEXCSVTests(unittest.TestCase):
         ).replace(b"NVDA", b"SPXW")
         with self.assertRaisesRegex(
             ValueError,
-            r"0DTE richiesta \\(2026-11-27\\).*non è presente nel CSV",
+            r"0DTE richiesta \(2026-11-27\).*non è presente nel CSV",
         ) as ctx:
             analyze_csv_gex(source, "SPX")
         self.assertIn("2026-12-01", str(ctx.exception))
