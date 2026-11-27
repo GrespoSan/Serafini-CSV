@@ -254,7 +254,7 @@ def _curve_chart(report, spot, *, symbol, es_spx_basis=None, es_quote=None):
     display_symbol = gex_price_label(symbol)
     marker_on_curve(
         gex_display_price(spot, symbol, es_spx_basis),
-        f"Spot CSV · {display_symbol} equivalente (ora fotografia)" if symbol == "SPX"
+        "Prezzo CSV" if symbol == "SPX"
         else f"Spot CSV · {display_symbol} (ora fotografia)",
         "#e5e7eb", "#9ca3af", 10,
     )
