@@ -580,9 +580,10 @@ def render(payload: bytes | None, symbol: str | None, *, es_spx_basis=None) -> N
         st.html(_gex_summary_card_html(
             "Weekly", reports.get("Weekly"), symbol, es_spx_basis,
         ))
-    same_expiry = (reports.get("0DTE") and reports.get("Weekly") and
-                   reports["0DTE"].get("expiry") ==
-                   reports["Weekly"].get("expiry"))
+    daily_expiry = (reports.get("0DTE") or {}).get("expiry")
+    weekly_expiry = (reports.get("Weekly") or {}).get("expiry")
+    same_expiry = bool(daily_expiry and weekly_expiry and
+                       daily_expiry == weekly_expiry)
     if same_expiry:
         st.caption(
             "**Attenzione:** Daily e Weekly indicano la stessa scadenza "
