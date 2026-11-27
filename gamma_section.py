@@ -576,26 +576,36 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
     except Exception as quote_error:
         es_quote = {"price": None, "error": type(quote_error).__name__}
     if offset is None:
-        st.caption(
-            "Prezzo attuale ES: N/D sui grafici SPX — necessario un "
-            "differenziale ES−SPX valido per allineare la scala."
+        st.caption("Prezzo ES: N/D · differenziale ES−SPX non disponibile.")
+        technical_notes.append(
+            "La quotazione ES non è sovrapposta al grafico SPX senza "
+            "un differenziale ES−SPX valido."
         )
     elif es_quote and es_quote.get("price") is not None:
         provider = ("Massive Futures · barra 5m chiusa" if
                     es_quote.get("source") == "MASSIVE_FUTURES_5MIN"
                     else "Yahoo Finance")
         st.caption(
-            f"**ES · {es_quote['price']:,.2f}** · **{provider}** · "
-            f"{es_quote['symbol']} · osservato "
+            f"**Prezzo ES {es_quote['price']:,.2f}** · {provider} · "
             f"**{es_quote['observed_rome']} Roma** · "
-            f"età osservazione {es_quote['age_minutes']:.1f} minuti. "
-            "Quotazione potenzialmente ritardata e indipendente dal "
-            "CSV Cboe. Linea arancione nei profili 0DTE e Weekly."
+            f"età {es_quote['age_minutes']:.1f} min (indicativo)."
+        )
+        technical_notes.append(
+            f"**Prezzo futures ES:** {es_quote['price']:,.2f} · "
+            f"{es_quote['symbol']} · {provider} · "
+            f"ora fonte {es_quote['observed_rome']} Roma · "
+            f"età {es_quote['age_minutes']:.1f} minuti. "
+            "Quotazione potenzialmente ritardata, indipendente dal CSV Cboe. "
+            "La linea arancione compare nei profili 0DTE e Weekly."
         )
     else:
         st.caption(
-            "**Prezzo ES: N/D** — nessuna quotazione valida <=90 minuti "
-            "da Yahoo o Massive (quando autorizzato). Nessun prezzo inventato."
+            "**Prezzo ES: N/D** · nessuna quotazione Yahoo/Massive "
+            "validata entro 90 minuti."
+        )
+        technical_notes.append(
+            "Il prezzo ES non viene ricostruito dal CSV: in assenza di "
+            "osservazioni recenti resta N/D. Nessun prezzo inventato."
         )
         if es_quote and es_quote.get("error"):
             with st.expander("Diagnostica fonti prezzo ES", expanded=False):
@@ -627,29 +637,42 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 f'</div>',
                 unsafe_allow_html=True,
             )
-            st.caption(f'Scadenza opzioni: {expiry:%d/%m/%Y} · Timestamp originale Cboe: {timestamp} (UTC da intestazione CSV)')
+            st.caption(f"**Scadenza opzioni:** {expiry:%d/%m/%Y}")
+            technical_notes.append(
+                f"**{title} · fonte.** Scadenza {expiry:%d/%m/%Y} · "
+                f"timestamp originale Cboe {timestamp or 'N/D'} "
+                "(UTC da intestazione CSV)."
+            )
             if not result['rows']:
                 st.warning('Nessun contratto trovato per questa scadenza nello snapshot: nessun risultato inventato.')
                 continue
             visual = visual_profiles.get(title, result)
             extra_count = len(visual.get('rows', [])) - len(result['rows'])
-            st.caption(f"{result['contracts']} contratti · {result['available_strikes']} strike disponibili · "
-                       f"{len(result['rows'])} originali (25+25)"
-                       + (f" + {extra_count} estesi solo per il grafico" if extra_count else ""))
+            st.caption(
+                f"**{len(result['rows'])} strike originali (25+25)**"
+                + (f" · +{extra_count} per il solo grafico" if extra_count else "")
+            )
+            technical_notes.append(
+                f"**{title} · profondità CSV:** {result['contracts']} contratti · "
+                f"{result['available_strikes']} strike disponibili · "
+                f"{len(result['rows'])} originali (25+25)"
+                + (f" · {extra_count} aggiunti solo ai grafici."
+                   if extra_count else " · nessuna estensione necessaria.")
+            )
             if show_visual_extension and visual.get('requested_low') is not None:
                 covered = bool(visual.get('coverage_complete'))
                 omitted = visual.get('sampled_strikes', 0)
                 shift = float(offset) if offset is not None and math.isfinite(offset) else 0.0
                 axis = 'ES' if offset is not None and math.isfinite(offset) else 'SPX'
                 if visual.get('decision') == '50_sufficienti':
-                    st.caption(
-                        f"Estensione intelligente: i 50 strike originali "
-                        f"coprono già il range {axis} e il margine; nessuno "
-                        f"strike aggiuntivo nel grafico o nel Pine."
+                    technical_notes.append(
+                        f"**{title} · estensione:** i 50 strike originali "
+                        f"coprono già range {axis} e margine; nessuno strike "
+                        "aggiunto nei grafici o nel Pine."
                     )
                 else:
-                    st.caption(
-                        f"Copertura NET GAMMA grafica {axis} "
+                    technical_notes.append(
+                        f"**{title} · copertura grafica {axis}:** "
                         f"{visual['actual_low'] + shift:,.2f}–"
                         f"{visual['actual_high'] + shift:,.2f}"
                         f" · obiettivo {visual['requested_low'] + shift:,.2f}–"
@@ -659,6 +682,17 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                         + (f" · {omitted} strike Cboe tralasciati per limite "
                            "grafico, senza interpolazioni" if omitted else "")
                     )
+                    if not covered:
+                        st.warning(
+                            f"**{title}: copertura strike incompleta.** "
+                            "La fascia richiesta non è interamente "
+                            "rappresentata nel CSV; vedi dettagli tecnici."
+                        )
+                    if omitted:
+                        st.caption(
+                            f"{title}: {omitted} strike Cboe esclusi solo "
+                            "dal disegno per il limite grafico."
+                        )
             records = [{**r, 'strike_es': r['strike_spx'] + offset if offset is not None else None} for r in visual['rows']]
             import pandas as pd
             frame = pd.DataFrame(records)
@@ -758,25 +792,47 @@ def render(store, week, snaps, logs, *, show_heading=True, selector_external=Fal
                 )
             if title == '0DTE':
                 if sigma_error:
-                    st.caption('Deviazione Serafini M15 non disponibile: ' + sigma_error)
+                    st.caption("StdDev M15: N/D · dettagli tecnici.")
+                    technical_notes.append(
+                        "**StdDev M15 non disponibile:** " + sigma_error
+                    )
                 elif offset is None:
-                    st.caption('Deviazione Serafini ES M15: richiede differenziale ES-SPX per allineare il grafico.')
+                    technical_notes.append(
+                        "**StdDev M15:** necessario il differenziale "
+                        "ES−SPX per allineare le bande al grafico."
+                    )
                 elif sigma_levels and sigma_levels.get('status') != 'VALIDO':
-                    st.caption('Deviazione Serafini M15 non disponibile: ' +
-                               str(sigma_levels.get('reason', 'storico insufficiente')) +
-                               '. Nessun livello ipotizzato.')
+                    st.caption("StdDev M15: N/D · dati non verificabili.")
+                    technical_notes.append(
+                        "**StdDev M15 non disponibile:** " +
+                        str(sigma_levels.get('reason', 'storico insufficiente')) +
+                        ". Nessun livello ipotizzato."
+                    )
                 elif sigma_levels and sigma_levels.get('status') == 'VALIDO':
                     st.caption(
-                        'StdDev Serafini v1.4 — ES=F M15 RTH Chicago 08:30–15:15; '
-                        '350/90 chiusure INCLUSA la candela 15:00–15:15, '
-                        'livelli congelati per la seduta successiva. '
+                        f"**StdDev 350:** L350 {sigma_levels['L350']:.2f} · "
+                        f"S350 {sigma_levels['S350']:.2f}"
+                        + (f" · L90 {sigma_levels['L90']:.2f}" if show_sigma_90
+                           else "")
+                    )
+                    technical_notes.append(
+                        "**StdDev Serafini v1.4:** ES=F M15, RTH Chicago "
+                        "08:30–15:15; 350/90 chiusure inclusa la candela "
+                        "15:00–15:15, livelli congelati per la seduta successiva. "
                         + f"L350 {sigma_levels['L350']:.2f} · "
                         + f"S350 {sigma_levels['S350']:.2f}"
-                        + (f" · L90 LONG {sigma_levels['L90']:.2f}" if show_sigma_90 else " · L90 OFF")
-                        + ('. Fuori dal range visualizzato: ' + ', '.join(clipped_sigma)
-                           if clipped_sigma else '.')
-                        + ' Fonte Yahoo ES=F: differenze possibili rispetto a TV ES1!.'
+                        + (f" · L90 LONG {sigma_levels['L90']:.2f}" if show_sigma_90
+                           else " · L90 OFF")
+                        + (". Fuori range: " + ", ".join(clipped_sigma)
+                           if clipped_sigma else ".")
+                        + " Fonte Yahoo ES=F: possibile differenza rispetto a TV ES1!."
                     )
+
+    # Tutti i controlli di qualità e la metodologia restano consultabili,
+    # senza duplicare lunghi paragrafi nel percorso operativo principale.
+    with st.expander("Dettagli tecnici NET GAMMA · fonti e metodo", expanded=False):
+        for note in technical_notes:
+            st.caption(note)
 
     # Confronto facoltativo SPX/ES come su Nasdaq. Fetch prezzi solo a toggle ON.
     # La proiezione y usa il differenziale gia' calcolato; Gamma invariato.
