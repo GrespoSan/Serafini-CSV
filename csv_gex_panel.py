@@ -347,7 +347,7 @@ def _strike_window(rows, *, spot, symbol, es_spx_basis=None, window="±2%"):
     return [(row, value) for row, value in priced if lo <= value <= hi], lo, hi, center
 
 
-def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
+def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%", es_quote=None):
     """GEX per strike specchiato, finestra selezionabile, livelli a destra.
 
     Usa esattamente report['rows'] e i livelli calcolati, senza ricampionare,
@@ -393,7 +393,7 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
         ("Call Wall", report["call_wall"], "#8fe10a", "solid", "#8fe10a", "#13210c"),
         ("Put Wall", report["put_wall"], "#9634db", "solid", "#9634db", "#ffffff"),
         ("Gamma Flip", report["flip"], "#c084fc", "dot", "#251237", "#e9c7ff"),
-        ("Spot CSV · ora fotografia", spot, "#e2e8f0", "dash", "#e2e8f0", "#111827"),
+        ("Prezzo CSV", spot, "#e2e8f0", "dash", "#e2e8f0", "#111827"),
     ]
     offscreen = []
     for label, raw, color, dash, background, foreground in markers:
@@ -403,22 +403,78 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
         if not (low <= price <= high):
             offscreen.append(label)
             continue
+        legend_label = ("Prezzo CSV" if label == "Prezzo CSV"
+                        else f"{label} / {display_symbol}")
+        box_label = ("PREZZO CSV" if label == "Prezzo CSV"
+                     else f"{label.upper()} / {display_symbol}")
         fig.add_trace(go.Scatter(
             x=[-x_extent, x_extent], y=[price, price],
-            mode="lines", name=f"{label} / {display_symbol}",
+            mode="lines", name=legend_label,
             line=dict(color=color, width=1.35, dash=dash),
-            hovertemplate=f"{label} / {display_symbol} %{{y:,.2f}}<extra></extra>",
+            hovertemplate=f"{legend_label} %{{y:,.2f}}<extra></extra>",
         ))
         fig.add_annotation(
             x=1.014, y=price, xref="paper", yref="y",
             xanchor="left", yanchor="middle",
-            text=(f"<b>{label.upper()} / {display_symbol}"
-                  f" &nbsp; {price:,.2f}</b>"),
+            text=f"<b>{box_label} &nbsp; {price:,.2f}</b>",
             showarrow=False, align="left",
             bgcolor=background, bordercolor=color,
             borderwidth=1, borderpad=5,
             font=dict(family="Arial", size=11, color=foreground),
         )
+
+    # Riferimento ES indipendente dal CSV, ottenuto dallo stesso cache
+    # Yahoo/Massive della curva. Non ricampiona strike né calcola GEX.
+    # Mostra una linea SOLO se la quotazione è vera, identificata, recente
+    # (<=90 minuti) e interna alla finestra verticale scelta dall'utente.
+    external_quote = None
+    external_outside = None
+    if symbol == "SPX" and isinstance(es_quote, dict):
+        try:
+            quote_price = float(es_quote["price"])
+            quote_age = float(es_quote["age_minutes"])
+            quote_source = es_quote["source"]
+            if (quote_source in ("YAHOO_FINANCE_CHART", "MASSIVE_FUTURES_5MIN")
+                    and es_quote.get("observed_rome") and es_quote.get("symbol")
+                    and math.isfinite(quote_price) and quote_price > 0
+                    and math.isfinite(quote_age) and 0 <= quote_age <= 90):
+                provider = ("Yahoo" if quote_source == "YAHOO_FINANCE_CHART"
+                            else "Massive 5m")
+                external_quote = (quote_price, provider)
+                if low <= quote_price <= high:
+                    fig.add_trace(go.Scatter(
+                        x=[-x_extent, x_extent], y=[quote_price, quote_price],
+                        mode="lines", name=f"Prezzo {provider} · {quote_price:,.2f}",
+                        line=dict(color="#fb923c", width=2, dash="dash"),
+                        hovertemplate=(
+                            f"Prezzo ES {provider}: %{{y:,.2f}}"
+                            f"<br>Ora fonte: {es_quote['observed_rome']} Roma"
+                            f"<br>Età: {quote_age:.1f} minuti<extra></extra>"
+                        ),
+                    ))
+                    # I cartellini devono essere leggibili anche quando
+                    # spot CSV e prezzo esterno sono ravvicinati.
+                    nearby = [
+                        gex_display_price(raw, symbol, es_spx_basis)
+                        for _, raw, *_ in markers
+                    ]
+                    yshift = (14 if any(p is not None and
+                                abs(p - quote_price) <= max(min_step, 8.0)
+                                for p in nearby) else 0)
+                    fig.add_annotation(
+                        x=1.014, y=quote_price, xref="paper", yref="y",
+                        xanchor="left", yanchor="middle", yshift=yshift,
+                        text=f"<b>PREZZO {provider.upper()} &nbsp; "
+                             f"{quote_price:,.2f}</b>",
+                        showarrow=False, align="left",
+                        bgcolor="#332012", bordercolor="#fb923c",
+                        borderwidth=1, borderpad=5,
+                        font=dict(family="Arial", size=11, color="#fdba74"),
+                    )
+                else:
+                    external_outside = f"{provider}: {quote_price:,.2f}"
+        except (TypeError, ValueError, KeyError, OverflowError):
+            pass
 
     # Asse leggibile anche su schermi 1080p; invece di scrivere ogni strike
     # si mantiene la risoluzione originaria ma si diradano le tacche.
@@ -450,6 +506,8 @@ def _strikes_chart(report, *, symbol, spot, es_spx_basis=None, window="±2%"):
         "window": window,
         "offscreen_levels": offscreen,
         "spot_display": center,
+        "es_quote_shown": bool(external_quote and external_outside is None),
+        "es_quote_outside_window": external_outside,
     })
     return fig
 
