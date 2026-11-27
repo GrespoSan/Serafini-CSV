@@ -334,10 +334,14 @@ def _premarket_spx_spot(options, expiry):
     """
     from statistics import median
     pairs = {}
+    known_expiries = set()
+    spxw_contracts_for_target = 0
     for option in options:
         occ = parse_occ(str(option["option"]))
+        known_expiries.add(occ.expiry)
         if occ.root != "SPXW" or occ.expiry != expiry:
             continue
+        spxw_contracts_for_target += 1
         bid, ask = float(option.get("bid") or 0), float(option.get("ask") or 0)
         if not (math.isfinite(bid) and math.isfinite(ask) and 0 < bid <= ask):
             continue
@@ -345,6 +349,30 @@ def _premarket_spx_spot(options, expiry):
         if occ.type in pair:
             raise ValueError("Parità SPXW: contratto duplicato.")
         pair[occ.type] = (bid, ask)
+    # Prima di giudicare gli spread, verificare che il CSV includa
+    # davvero l'0DTE richiesta: un file filtrato solo su dicembre
+    # non ha alcuna coppia 0DTE del 27 novembre, quindi il messaggio
+    # "meno di 10 coppie con spread <=4" sarebbe fuorviante.
+    if expiry not in known_expiries:
+        bounds = (
+            f"Scadenze effettive nel file: "
+            f"{min(known_expiries).isoformat()} – "
+            f"{max(known_expiries).isoformat()}."
+            if known_expiries else "Nessuna scadenza leggibile nel CSV."
+        )
+        raise ValueError(
+            f"GEX pre-USA N/D: la 0DTE richiesta ({expiry.isoformat()}) "
+            f"non è presente nel CSV. {bounds} "
+            "Il controllo dello SPX implicito richiede coppie 0DTE "
+            "SPXW Call/Put della scadenza richiesta; nessuno spot "
+            "o livello GEX viene derivato da altre scadenze."
+        )
+    if not spxw_contracts_for_target:
+        raise ValueError(
+            f"GEX pre-USA N/D: scadenza {expiry.isoformat()} nel CSV, "
+            "ma nessun contratto SPXW 0DTE utilizzabile per la "
+            "validazione dello SPX implicito."
+        )
     estimates = []
     for strike, pair in pairs.items():
         if set(pair) != {"call", "put"}:
